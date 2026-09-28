@@ -59,6 +59,7 @@ def main():
     ap.add_argument("--updates", action="store_true", help="updates come from our server (Windows)")
     ap.add_argument("--packer", action="store_true", help="Windows installer reads its files from the end of the exe")
     ap.add_argument("--android", action="store_true", help="Android reads its settings from assets/custom.txt")
+    ap.add_argument("--appimage", action="store_true", help="Linux reads settings attached to its AppImage")
     a = ap.parse_args()
     if not a.check and not a.key:
         fail("no settings public key")
@@ -91,6 +92,19 @@ def main():
             s = s.replace(old, new, 1).replace("BIN_DATA", "bin_data()")
             open(path, "w", encoding="utf-8", newline="\n").write(s)
         print("ok: the installer reads its files from the end of the exe")
+
+    if a.appimage:
+        # settings attached to the end of an AppImage win over its custom.txt
+        p.replace("src/common.rs",
+                  "pub fn load_custom_client() {\n",
+                  "pub fn load_custom_client() {\n"
+                  "    #[cfg(target_os = \"linux\")]\n"
+                  "    if let Some(data) = comtech_appimage_settings() {\n"
+                  "        read_custom_client(&data);\n"
+                  "        return;\n"
+                  "    }\n",
+                  "AppImages read settings attached to their end")
+        p.append("src/common.rs", "comtech_appimage.rs", "the AppImage settings reader")
 
     if a.android:
         # the service and the app both read the settings the Client Builder
