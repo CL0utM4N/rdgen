@@ -32,7 +32,7 @@ def name_of(step):
 
 
 drop = {
-    'Set rdgen value', 'Install ImageMagick on Windows', 'change appname to custom',
+    'Set rdgen value', 'Install ImageMagick on Windows', 'removeNewVersionNotif', 'change appname to custom',
     'fix registry if appname has a space', 'magick stuff', 'ui.rs icon',
     'replace flutter icons', 'icon stuff', 'logo stuff', 'Create custom.txt file',
     'Add MSBuild to PATH', 'Build msi', 'zip exe and msi', 'sign exe and msi',
@@ -40,16 +40,18 @@ drop = {
     'rename rustdesk.msi to filename.msi', 'send file to rdgen server', 'send file to api server',
 }
 
-trust_key = '''      - name: Comtech - trust settings signed by the Client Builder
+trust_key = '''      - name: Checkout the Comtech patches
+        uses: actions/checkout@v4
+        with:
+          path: .comtech
+          sparse-checkout: .github/patches
+
+      - name: Comtech changes
         shell: bash
         run: |
-          # custom.txt (app name, server, settings) is only read when signed.
-          # Swap RustDesk's signing key for ours, so only settings made by
-          # our Client Builder are accepted. rdgen deletes the check instead.
-          if [ -z "$settingsPubKey" ]; then echo "::error::no settings public key"; exit 1; fi
-          grep -q 'const KEY: &str = "5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=";' src/common.rs || { echo "::error::RustDesk's custom client key check moved; update the base workflow"; exit 1; }
-          sed -i -e "s|const KEY: &str = \\"5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=\\";|const KEY: \\&str = \\"$settingsPubKey\\";|" src/common.rs
-          grep -q "const KEY: &str = \\"$settingsPubKey\\";" src/common.rs || { echo "::error::key patch failed"; exit 1; }
+          # signed settings only, updates from our server, and an installer
+          # the Client Builder can brand; see .github/patches/comtech_patch.py
+          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --updates --packer
 
       - name: Remove the set up server tip
         continue-on-error: true
@@ -57,31 +59,6 @@ trust_key = '''      - name: Comtech - trust settings signed by the Client Build
         run: |
           Invoke-WebRequest -Uri https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/removeSetupServerTip.diff -OutFile removeSetupServerTip.diff
           git apply removeSetupServerTip.diff
-
-'''
-
-packer = '''      - name: Checkout the Comtech patches
-        uses: actions/checkout@v4
-        with:
-          path: .comtech
-          sparse-checkout: .github/patches
-
-      - name: Comtech - packer reads its files from the end of the exe
-        shell: python
-        run: |
-          # The single file installer normally compiles its files in. Read
-          # them from data attached to the end of the exe instead, so the
-          # Client Builder can swap files (settings, icons) without compiling.
-          p = "libs/portable/src/bin_reader.rs"
-          s = open(p, encoding="utf-8").read()
-          old = ('#[cfg(windows)]\\nconst BIN_DATA: &[u8] = include_bytes!("../data.bin");\\n'
-                 '#[cfg(not(windows))]\\nconst BIN_DATA: &[u8] = &[];\\n')
-          if old not in s:
-              raise SystemExit("::error::bin_reader.rs changed; update the base workflow")
-          new = open(".comtech/.github/patches/comtech_bin_data.rs", encoding="utf-8").read()
-          s = s.replace(old, new, 1).replace("BIN_DATA", "bin_data()")
-          open(p, "w", encoding="utf-8").write(s)
-          print("packer patched")
 
 '''
 
@@ -122,7 +99,6 @@ for st in steps:
         out.append(trust_key)
         continue
     if n == 'Build self-extracted executable':
-        out.append(packer)
         out.append(build_base)
         continue
     out.append(st)
@@ -135,9 +111,6 @@ head = head.replace('name: Custom Windows Client Generator\nrun-name: Custom Win
                     'name: Comtech Windows Base Client\nrun-name: Comtech Windows Base Client ${{ inputs.version }}')
 head = head.replace("  STATUS_URL: \"${{ secrets.GENURL }}/updategh\"\n", '')
 build_head = build_head.replace('name: Build Windows', 'name: Build Windows base client').replace('needs: [build-RustDeskTempTopMostWindow, generate-bridge, setup]', 'needs: [build-RustDeskTempTopMostWindow, generate-bridge, setup, check-patches]')
-
-_ps = packer.index('      - name: Comtech - packer reads')
-packer_step = packer[_ps:packer.index('\n\n', _ps) + 1]
 
 check_job = """  check-patches:
     name: Check the Comtech changes still apply
@@ -153,16 +126,17 @@ check_job = """  check-patches:
         with:
           path: .comtech
           sparse-checkout: .github/patches
-      - name: Check the settings key can be replaced
+      - name: Check the Comtech changes apply
+        shell: bash
+        run: python3 .comtech/.github/patches/comtech_patch.py --check --updates --packer
+      - name: Compile check the packer
         shell: bash
         run: |
-          grep -q 'const KEY: &str = "5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=";' src/common.rs || { echo "::error::RustDesk's custom client key check moved; update the base workflow"; exit 1; }
-""" + packer_step + """      - name: Compile check the packer
-        shell: bash
-        run: |
+          python3 .comtech/.github/patches/comtech_patch.py --key check --packer
           # checked as its own workspace; RustDesk's needs every submodule
           cd libs/portable
-          printf '\\n[workspace]\\n' >> Cargo.toml
+          echo >> Cargo.toml
+          echo "[workspace]" >> Cargo.toml
           echo "timestamp = 0" > app_metadata.toml
           cargo check --release
 """
