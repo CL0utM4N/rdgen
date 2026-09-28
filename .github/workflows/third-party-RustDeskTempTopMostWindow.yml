@@ -77,7 +77,7 @@ jobs:
           shell: pwsh
           command: |
             cd RustDeskTempTopMostWindow && git checkout 53b548a5398624f7149a382000397993542ad796
-            if ($env:privacylink_url-ne "false") {
+            if ($env:privacylink_url -and $env:privacylink_url -ne "false") {
               Invoke-WebRequest -Uri ${{ env.privacylink_url }}/get_png?filename=${{ env.privacylink_file }}"&"uuid=${{ env.privacylink_uuid }} -OutFile privacy.png
               Invoke-WebRequest -Uri https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/privacyScreen.py -OutFile privacyScreen.py
               python privacyScreen.py
