@@ -85,9 +85,7 @@ jobs:
           cp -r libs/portable ../portable-check
           cp Cargo.lock ../portable-check/ || true
           cd ../portable-check
-          printf '
-[workspace]
-' >> Cargo.toml
+          printf '\n[workspace]\n' >> Cargo.toml
           echo "timestamp = 0" > app_metadata.toml
           cargo check --release
 
