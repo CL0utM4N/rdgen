@@ -81,7 +81,13 @@ jobs:
       - name: Compile check the packer
         shell: bash
         run: |
-          cd libs/portable
+          # checked on its own; the RustDesk workspace needs every submodule
+          cp -r libs/portable ../portable-check
+          cp Cargo.lock ../portable-check/ || true
+          cd ../portable-check
+          printf '
+[workspace]
+' >> Cargo.toml
           echo "timestamp = 0" > app_metadata.toml
           cargo check --release
 
