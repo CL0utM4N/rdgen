@@ -732,8 +732,8 @@ const Map<String, List<String>> kEnglish = {
   'Event_client_base_update_available': ['RustDesk released a version newer than a base client'],
   'Event_client_base_ready': ['a new base client is ready for instant builds'],
   'Event_client_base_failed': ['a base client build failed'],
-  'TechnicianApp': ['Technician app'],
-  'TechnicianAppHelp': ['Our own staff\'s RustDesk, which opens on this console with the RustDesk home page under Client. Staff sign in with their usual account. The links below always give the newest version, and it\'s remade automatically when a new base client is built; installed Windows copies update themselves.'],
+  'TechnicianApp': ['Comtech Remote Admin'],
+  'TechnicianAppHelp': ['Our own staff\'s RustDesk app, which opens on this console with the RustDesk home page under Client. Staff sign in with their usual account. The links below always give the newest version, and it\'s remade automatically when a new base client is built; installed Windows copies update themselves.'],
   'TechnicianNotMade': ['Not made yet'],
   'TechnicianMake': ['Make'],
   'TechnicianRemake': ['Remake'],
@@ -741,5 +741,5 @@ const Map<String, List<String>> kEnglish = {
   'TechnicianMaking': ['Making the app…'],
   'TechnicianFailed': ['Making it failed: {msg}'],
   'TechnicianNeedsBase': ['Needs a base client first'],
-  'TechnicianStarted': ['Making the technician app'],
+  'TechnicianStarted': ['Making Comtech Remote Admin'],
 };

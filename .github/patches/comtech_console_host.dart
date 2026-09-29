@@ -31,7 +31,6 @@ ThemeData comtechClientTheme(ThemeData outer) {
   final c = dark ? CtColors.darkColors : CtColors.light;
   final rdColors = outer.extension<rd.ColorThemeExtension>() ?? (dark ? rd.ColorThemeExtension.dark : rd.ColorThemeExtension.light);
   final radius = BorderRadius.circular(8);
-  OutlineInputBorder border(Color color) => OutlineInputBorder(borderRadius: radius, borderSide: BorderSide(color: color));
   return outer.copyWith(
     scaffoldBackgroundColor: c.bg,
     canvasColor: c.surface,
@@ -66,12 +65,8 @@ ThemeData comtechClientTheme(ThemeData outer) {
       ),
     ),
     textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: c.primary)),
-    inputDecorationTheme: outer.inputDecorationTheme.copyWith(
-      fillColor: c.surface2,
-      enabledBorder: border(c.borderStrong),
-      focusedBorder: border(c.primary),
-      border: border(c.borderStrong),
-    ),
+    // input borders stay as RustDesk sets them: its ID and password are
+    // plain text fields that would otherwise get outlines
     extensions: [
       for (final e in outer.extensions.values)
         if (e is! rd.ColorThemeExtension) e,
