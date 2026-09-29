@@ -131,7 +131,6 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
         'note': '',
         'device_group_id': null,
         'preset_user_id': null,
-        'tech_console': false,
         'server_host': opts['server_host'] ?? '',
         'server_port': opts['server_port'] ?? '',
         'api_server': opts['api_server'] ?? '',
@@ -285,18 +284,6 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
               onChanged: (v) => set(() => f['direction'] = v),
             ),
           ),
-          item(
-            T('TechConsole'),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: CtSwitch(
-                value: f['tech_console'] == true && inst && f['platform'] != 'android',
-                onChanged: inst && f['platform'] != 'android' ? (v) => set(() => f['tech_console'] = v) : null,
-              ),
-            ),
-            help: inst && f['platform'] != 'android' ? T('TechConsoleHelp') : T('TechConsoleNeedsInstant'),
-            warn: !inst || f['platform'] == 'android',
-          ),
           sw('disable_installation', T('DisableInstallation')),
           sw('disable_settings', T('DisableSettings')),
         ];
@@ -406,13 +393,7 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
             return Toasts.error(T('ParamRequired', {'param': T('ExeFileName')}));
           }
           set(() => submitting = true);
-          final data = {
-            ...f,
-            'device_group_id': f['device_group_id'] ?? 0,
-            'preset_user_id': f['preset_user_id'] ?? 0,
-            'instant': instant(),
-            'tech_console': f['tech_console'] == true && instant() && f['platform'] != 'android',
-          };
+          final data = {...f, 'device_group_id': f['device_group_id'] ?? 0, 'preset_user_id': f['preset_user_id'] ?? 0, 'instant': instant()};
           try {
             final d = await api.post('/client_build/create', body: data, timeout: const Duration(seconds: 120));
             Toasts.success(!instant() ? T('BuildStarted') : (d is Map && d['status'] == 'in_progress' ? T('InstallerMaking') : T('InstallerReady')));
@@ -442,6 +423,7 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
       listenable: ctl,
       builder: (context, _) => PageColumn([
         BaseCard(onStatus: (s) => setState(() => base = s)),
+        const TechCard(),
         QueryBar(
           above: opts['loaded'] == true && opts['ready'] != true && !anyBase
               ? CtAlert(
@@ -678,6 +660,113 @@ class _BaseCardState extends State<BaseCard> {
               TextSpan(text: '${T('PushUpdates')}: ', style: TextStyle(color: c.muted, fontSize: 13)),
               TextSpan(text: options['push_updates'] == true ? T('On') : T('Off'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
             ])),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Our own staff's app, which opens on the console.
+class TechCard extends StatefulWidget {
+  const TechCard({super.key});
+
+  @override
+  State<TechCard> createState() => _TechCardState();
+}
+
+class _TechCardState extends State<TechCard> {
+  List<Row_> apps = [];
+  bool loading = false;
+  String making = '';
+  Timer? timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    // macOS and Linux take a minute or two
+    timer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (apps.any((a) => (a['build'] as Map?)?['status'] == 'in_progress')) _load(quiet: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool quiet = false}) async {
+    if (!quiet) setState(() => loading = true);
+    try {
+      final d = await api.get('/client_build/technician', quiet: true);
+      apps = rowsOf(d['apps']);
+    } catch (_) {}
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _make(Row_ a) async {
+    setState(() => making = '${a['platform']}');
+    try {
+      await api.post('/client_build/technician/make', body: {'platform': a['platform']}, timeout: const Duration(seconds: 120));
+      Toasts.success(T('TechnicianStarted'));
+      _load();
+    } catch (_) {}
+    if (mounted) setState(() => making = '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ct;
+    return CtCard(
+      child: Loading(
+        loading: loading,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          CardHead(T('TechnicianApp'), titleSize: 16, help: T('TechnicianAppHelp')),
+          const SizedBox(height: 12),
+          CtTable(small: true, border: false, rows: apps, columns: [
+            Col(T('Platform'), width: 120, center: false, cell: (r, _) => Text('${r['label']}', style: const TextStyle(fontWeight: FontWeight.w700))),
+            Col(T('Version'),
+                width: 190,
+                center: false,
+                cell: (r, _) => Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      (r['links'] as List).isNotEmpty
+                          ? Text('RustDesk ${(r['build'] as Map?)?['version'] ?? ''}')
+                          : Text(T('TechnicianNotMade'), style: TextStyle(fontSize: 12, color: c.muted)),
+                      if (r['outdated'] == true) CtTag(T('UpdateAvailable'), small: true, tone: Tone.warning),
+                    ])),
+            Col(T('Installers'),
+                minWidth: 300,
+                center: false,
+                cell: (r, _) {
+                  final b = r['build'] as Map?;
+                  return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                    if (b?['status'] == 'in_progress') Text(T('TechnicianMaking'), style: TextStyle(fontSize: 12, color: c.muted)),
+                    if (b?['status'] == 'failure' || b?['status'] == 'error')
+                      Text(T('TechnicianFailed', {'msg': b?['message']}), style: TextStyle(fontSize: 12, color: c.danger)),
+                    for (final l in rowsOf(r['links']))
+                      Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        CtButton('${l['name']}', link: true, tone: Tone.primary, onPressed: () => openUrl('${l['url']}')),
+                        CtButton(T('CopyLink'), link: true, size: BtnSize.small, onPressed: () => copyText('${l['url']}')),
+                      ]),
+                  ]);
+                }),
+            Col('',
+                width: 200,
+                right: true,
+                cell: (r, _) {
+                  final base = '${r['base_version'] ?? ''}';
+                  if (base.isEmpty) return CtButton(T('TechnicianNeedsBase', {'platform': r['label']}), size: BtnSize.small);
+                  final made = (r['links'] as List).isNotEmpty;
+                  return CtButton(
+                    !made ? T('TechnicianMake') : (r['outdated'] == true ? T('TechnicianUpdate', {'v': base}) : T('TechnicianRemake')),
+                    size: BtnSize.small,
+                    tone: !made || r['outdated'] == true ? Tone.primary : null,
+                    loading: making == r['platform'],
+                    onPressed: (r['build'] as Map?)?['status'] == 'in_progress' ? null : () => _make(r),
+                  );
+                }),
           ]),
         ]),
       ),
