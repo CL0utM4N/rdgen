@@ -927,7 +927,7 @@ class _UserTokenPageState extends State<UserTokenPage> {
             width: 170,
             cell: (r, _) => r['client'] == 'integration'
                 ? CtTag('${r['app_name'] ?? ''}'.isEmpty ? T('App') : '${r['app_name']}', small: true, tone: Tone.warning)
-                : Text({'webadmin': T('WebConsole'), 'app': 'RustDesk app', 'webclient': 'Web client'}[r['client']] ??
+                : Text({'webadmin': T('WebConsole'), 'console': 'Comtech Remote Admin', 'app': 'RustDesk app', 'webclient': 'Web client'}[r['client']] ??
                     ('${r['client'] ?? ''}'.isEmpty ? '-' : '${r['client']}'))),
         Col(T('Token'), cell: (r, _) => Text(mask('${r['token'] ?? ''}'))),
         Col(T('CreatedAt'), prop: 'created_at'),
