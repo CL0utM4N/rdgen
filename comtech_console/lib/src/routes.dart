@@ -39,6 +39,11 @@ class SectionDef {
 final sections = <SectionDef>[
   SectionDef('DashboardRoot', 'Dashboard', [RouteDef('Dashboard', 'Dashboard', Icons.speed_outlined, (_) => const DashboardPage())], single: true),
   const SectionDef('ClientRoot', 'Client', [RouteDef('Client', 'Client', Icons.screen_share_outlined, null)], single: true),
+  // support work sits with the client, not in a section of its own
+  SectionDef('SupportSessionRoot', 'SupportSessions',
+      [RouteDef('SupportSession', 'SupportSessions', Icons.headset_mic_outlined, (_) => const SupportPage())], single: true),
+  SectionDef('ClientBuildRoot', 'ClientBuilder',
+      [RouteDef('ClientBuild', 'ClientBuilder', Icons.inventory_2_outlined, (_) => const ClientBuildPage())], single: true),
   SectionDef('My', 'MenuMyAccount', [
     RouteDef('MyInfo', 'MenuMyProfile', Icons.person_outline, (_) => const MyInfoPage()),
     RouteDef('MyPeer', 'MenuMyDevices', Icons.desktop_windows_outlined, (_) => const MyPeerPage()),
@@ -55,10 +60,6 @@ final sections = <SectionDef>[
     RouteDef('DeviceApproval', 'DeviceApprovals', Icons.check_circle_outline, (_) => const ApprovalsPage()),
     RouteDef('Strategy', 'ClientPolicies', Icons.tune, (_) => const StrategyPage()),
     RouteDef('VersionReport', 'VersionReport', Icons.pie_chart_outline, (_) => const VersionReportPage()),
-  ]),
-  SectionDef('SupportSection', 'MenuSupport', [
-    RouteDef('SupportSession', 'SupportSessions', Icons.headset_mic_outlined, (_) => const SupportPage()),
-    RouteDef('ClientBuild', 'ClientBuilder', Icons.inventory_2_outlined, (_) => const ClientBuildPage()),
   ]),
   SectionDef('AddressBooksSection', 'MenuAddressBooks', [
     RouteDef('UserAddressBook', 'MenuAllAddressBooks', Icons.menu_book_outlined, (_) => const AddressBookPage(mine: false)),
