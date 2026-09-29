@@ -150,6 +150,24 @@ def main():
                   "        page: DesktopHomePage(\n          key: const ValueKey(kTabLabelHomePage),\n        )));",
                   "        page: comtechHomePage(const ValueKey(kTabLabelHomePage))));",
                   "technician builds open on the console")
+        # the home page under Client takes the console's colours; RustDesk
+        # fixes these few, so they follow a function that keeps them as they
+        # are in customers' builds
+        home = "flutter/lib/desktop/pages/desktop_home_page.dart"
+        p.replace(home, "import 'dart:convert';\n",
+                  "import 'dart:convert';\nimport 'package:flutter_hbb/comtech/console_host.dart';\n",
+                  "the home page can take the console's colours")
+        p.replace(home, "decoration: const BoxDecoration(color: MyTheme.accent),",
+                  "decoration: BoxDecoration(color: comtechAccent(context)),", "the ID accent bar")
+        p.replace(home, "decoration: BoxDecoration(color: MyTheme.accent),",
+                  "decoration: BoxDecoration(color: comtechAccent(context)),", "the password accent bar")
+        p.replace(home,
+                  "                colors: [\n                  Color.fromARGB(255, 226, 66, 188),\n"
+                  "                  Color.fromARGB(255, 244, 114, 124),\n                ],",
+                  "                colors: comtechBannerColors(context, const [\n"
+                  "                  Color.fromARGB(255, 226, 66, 188),\n"
+                  "                  Color.fromARGB(255, 244, 114, 124),\n                ]),",
+                  "the install banner")
 
     print("all Comtech changes " + ("apply" if a.check else "applied"))
 

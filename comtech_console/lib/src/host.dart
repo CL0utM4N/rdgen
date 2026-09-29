@@ -17,12 +17,15 @@ abstract class ConsoleHost {
   String? loadSetting(String key);
   void saveSetting(String key, String value);
 
-  /// The token the client itself is signed in with, if any. The console and
-  /// the client share sign-ins, so this skips the console's own login.
-  String? get clientToken => null;
+  /// This device's RustDesk ID and uuid. Given, a console sign-in also
+  /// signs the client in, with its own app session on this device.
+  String? get deviceId => null;
+  String? get deviceUuid => null;
 
-  /// The console signed in or out; the client can follow suit.
-  void onSignedIn(String token) {}
+  /// The console signed in and the server made the client its own session.
+  void onClientSignIn(String clientToken) {}
+
+  /// Someone chose Logout in the console; the client signs out too.
   void onSignedOut() {}
 
   /// Dark mode changed in the console, so the client can match it.

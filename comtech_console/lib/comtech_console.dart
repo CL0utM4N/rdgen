@@ -5,3 +5,4 @@ library comtech_console;
 export 'src/console.dart' show Console;
 export 'src/host.dart';
 export 'src/shell.dart' show ConsoleShell;
+export 'src/theme.dart' show CtColors;

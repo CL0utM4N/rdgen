@@ -24,15 +24,90 @@ bool comtechConsoleEnabled() {
 /// The home tab: the console for technician builds, else the usual page.
 Widget comtechHomePage(Key key) => comtechConsoleEnabled() ? ComtechConsolePage(key: key) : DesktopHomePage(key: key);
 
+/// The console's colours for the RustDesk home page under Client: its
+/// widgets take them from the theme, so the layout stays as RustDesk has it.
+ThemeData comtechClientTheme(ThemeData outer) {
+  final dark = outer.brightness == Brightness.dark;
+  final c = dark ? CtColors.darkColors : CtColors.light;
+  final rdColors = outer.extension<rd.ColorThemeExtension>() ?? (dark ? rd.ColorThemeExtension.dark : rd.ColorThemeExtension.light);
+  final radius = BorderRadius.circular(8);
+  OutlineInputBorder border(Color color) => OutlineInputBorder(borderRadius: radius, borderSide: BorderSide(color: color));
+  return outer.copyWith(
+    scaffoldBackgroundColor: c.bg,
+    canvasColor: c.surface,
+    cardColor: c.surface,
+    dividerColor: c.border,
+    hoverColor: c.surfaceHover,
+    highlightColor: c.surfaceHover,
+    primaryColor: c.primary,
+    colorScheme: outer.colorScheme.copyWith(
+      primary: c.primary,
+      secondary: c.primary,
+      // ignore: deprecated_member_use
+      background: c.surface,
+      surface: c.surface,
+      onSurface: c.text,
+    ),
+    textTheme: outer.textTheme.apply(bodyColor: c.text, displayColor: c.text),
+    iconTheme: outer.iconTheme.copyWith(color: c.text2),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: c.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: radius),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: c.text2,
+        side: BorderSide(color: c.borderStrong),
+        shape: RoundedRectangleBorder(borderRadius: radius),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: c.primary)),
+    inputDecorationTheme: outer.inputDecorationTheme.copyWith(
+      fillColor: c.surface2,
+      enabledBorder: border(c.borderStrong),
+      focusedBorder: border(c.primary),
+      border: border(c.borderStrong),
+    ),
+    extensions: [
+      for (final e in outer.extensions.values)
+        if (e is! rd.ColorThemeExtension) e,
+      rdColors.copyWith(border: c.border, border2: c.borderStrong, border3: c.borderStrong, highlight: c.surfaceHover, divider: c.border),
+    ],
+  );
+}
+
+/// The accent bars beside this device's ID and password.
+Color comtechAccent(BuildContext context) => comtechConsoleEnabled() ? Theme.of(context).colorScheme.primary : rd.MyTheme.accent;
+
+/// The install banner, blue in the technician app instead of RustDesk's pink.
+List<Color> comtechBannerColors(BuildContext context, List<Color> normal) {
+  if (!comtechConsoleEnabled()) return normal;
+  final c = Theme.of(context).brightness == Brightness.dark ? CtColors.darkColors : CtColors.light;
+  return [c.primary, c.primaryHover];
+}
+
 class RustDeskConsoleHost extends ConsoleHost {
   final String server;
-  RustDeskConsoleHost(this.server);
+  @override
+  final String? deviceId;
+  @override
+  final String? deviceUuid;
+  RustDeskConsoleHost(this.server, this.deviceId, this.deviceUuid);
 
   @override
   String get apiServer => server.endsWith('/') ? server.substring(0, server.length - 1) : server;
 
   @override
-  Widget? buildClientPage(BuildContext context) => const DesktopHomePage(key: ValueKey('comtech-client'));
+  Widget? buildClientPage(BuildContext context) => Builder(
+        builder: (context) => Theme(
+          data: comtechClientTheme(Theme.of(context)),
+          child: const DesktopHomePage(key: ValueKey('comtech-client')),
+        ),
+      );
 
   @override
   void connect(String id, {bool fileTransfer = false}) {
@@ -55,16 +130,10 @@ class RustDeskConsoleHost extends ConsoleHost {
   }
 
   @override
-  String? get clientToken {
-    final t = bind.mainGetLocalOption(key: 'access_token');
-    return t.isEmpty ? null : t;
-  }
-
-  @override
-  void onSignedIn(String token) {
-    // one sign-in for both: the client's address book and account follow
-    if (bind.mainGetLocalOption(key: 'access_token') == token) return;
-    bind.mainSetLocalOption(key: 'access_token', value: token).then((_) => rd.gFFI.userModel.refreshCurrentUser());
+  void onClientSignIn(String clientToken) {
+    // signing in to the console signs the client in too, with its own
+    // session that lasts like any RustDesk sign-in
+    bind.mainSetLocalOption(key: 'access_token', value: clientToken).then((_) => rd.gFFI.userModel.refreshCurrentUser());
   }
 
   @override
@@ -100,8 +169,8 @@ class _ComtechConsolePageState extends State<ComtechConsolePage> with AutomaticK
   void initState() {
     super.initState();
     if (!_started) {
-      bind.mainGetApiServer().then((server) {
-        Console(RustDeskConsoleHost(server));
+      Future.wait([bind.mainGetApiServer(), bind.mainGetMyId(), bind.mainGetUuid()]).then((r) {
+        Console(RustDeskConsoleHost(r[0], r[1].isEmpty ? null : r[1], r[2].isEmpty ? null : r[2]));
         _started = true;
         if (mounted) setState(() {});
       });

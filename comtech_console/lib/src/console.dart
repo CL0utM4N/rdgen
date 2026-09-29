@@ -47,17 +47,15 @@ class Console extends ChangeNotifier {
 
   bool canRoute(String name) => routeNames.contains('*') || routeNames.contains(name);
 
-  /// Picks up a saved sign-in, or the one the client is using.
+  /// Picks up the console's saved sign-in. The client's own sign-in isn't
+  /// used: it lasts weeks, and the console keeps to its shorter timeouts.
   Future<void> restore() async {
-    for (final token in [host.loadSetting('console-token'), host.clientToken]) {
-      if (token == null || token.isEmpty) continue;
+    final token = host.loadSetting('console-token');
+    if (token != null && token.isNotEmpty) {
       api.token = token;
       try {
         final data = await api.get('/user/current', quiet: true);
-        if (data is Map) {
-          _apply(Map<String, dynamic>.from(data), token);
-          break;
-        }
+        if (data is Map) _apply(Map<String, dynamic>.from(data), token);
       } catch (_) {
         api.token = null;
       }
@@ -65,6 +63,11 @@ class Console extends ChangeNotifier {
     ready = true;
     notifyListeners();
   }
+
+  /// Added to sign-in requests so the client is signed in too.
+  Map<String, dynamic> get appSession => host.deviceUuid == null
+      ? const {}
+      : {'with_client': true, 'client_id': host.deviceId ?? '', 'client_uuid': host.deviceUuid};
 
   /// Called after the login (and two-factor) step succeeds.
   void signedIn_(Map<String, dynamic> data) {
@@ -82,7 +85,8 @@ class Console extends ChangeNotifier {
     route = canRoute('Dashboard') ? 'Dashboard' : 'MyInfo';
     args = {};
     nav++;
-    host.onSignedIn(t);
+    final clientToken = '${data['client_token'] ?? ''}';
+    if (clientToken.isNotEmpty) host.onClientSignIn(clientToken);
     loadConfig();
   }
 
@@ -117,7 +121,9 @@ class Console extends ChangeNotifier {
     user = {};
     routeNames = [];
     permissions = [];
-    host.onSignedOut();
+    // choosing Logout signs the client out too; a console session that timed
+    // out leaves the client signed in
+    if (tellServer) host.onSignedOut();
     notifyListeners();
   }
 

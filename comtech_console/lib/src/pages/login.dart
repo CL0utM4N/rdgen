@@ -97,6 +97,7 @@ class _LoginPageState extends State<LoginPage> {
         'platform': Console.I.host.platform,
         'captcha': captcha.text.trim(),
         'captcha_id': captchaId,
+        ...Console.I.appSession,
       });
       if (d is Map && '${d['mfa_ticket'] ?? ''}'.isNotEmpty) {
         ticket = '${d['mfa_ticket']}';
@@ -126,7 +127,7 @@ class _LoginPageState extends State<LoginPage> {
     if (code.text.trim().isEmpty || busy) return;
     setState(() => busy = true);
     try {
-      final d = await api.post('/login/mfa', body: {'ticket': ticket, 'code': code.text.trim()});
+      final d = await api.post('/login/mfa', body: {'ticket': ticket, 'code': code.text.trim(), ...Console.I.appSession});
       final data = Map<String, dynamic>.from(d as Map);
       // codes come back only when two-factor was set up just now
       final codes = List<String>.from(data['recovery_codes'] ?? const []);
