@@ -57,10 +57,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: .comtech
-          sparse-checkout: .github/patches
+          sparse-checkout: |
+            .github/patches
+            comtech_console
       - name: Check the Comtech changes apply
         shell: bash
-        run: python3 .comtech/.github/patches/comtech_patch.py --check --appimage
+        run: python3 .comtech/.github/patches/comtech_patch.py --check --appimage --console
 
   setup:
     uses: ./.github/workflows/fetch-encrypted-secrets.yml
@@ -308,13 +310,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: .comtech
-          sparse-checkout: .github/patches
+          sparse-checkout: |
+            .github/patches
+            comtech_console
 
       - name: Comtech changes
         shell: bash
         run: |
           # signed settings only; see .github/patches/comtech_patch.py
-          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --appimage
+          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --appimage --console
           wget -q https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/removeSetupServerTip.diff
           git apply removeSetupServerTip.diff || echo "::warning::set up server tip patch did not apply"
           # the build copies this into the packages; the settings come later

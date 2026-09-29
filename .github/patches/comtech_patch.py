@@ -4,14 +4,15 @@ Base clients are built once per RustDesk release; the Client Builder then
 brands each customer's installer on the server in seconds. Run from the
 RustDesk source folder:
 
-    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android]
-    python comtech_patch.py --check [--updates] [--packer] [--android]
+    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--console]
+    python comtech_patch.py --check [--updates] [--packer] [--android] [--console]
 
 --check only confirms every change still applies to this RustDesk version,
 so a new release that moved the code fails early and clearly.
 """
 import argparse
 import os
+import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +61,7 @@ def main():
     ap.add_argument("--packer", action="store_true", help="Windows installer reads its files from the end of the exe")
     ap.add_argument("--android", action="store_true", help="Android reads its settings from assets/custom.txt")
     ap.add_argument("--appimage", action="store_true", help="Linux reads settings attached to its AppImage")
+    ap.add_argument("--console", action="store_true", help="technician builds open the Comtech console (desktop)")
     a = ap.parse_args()
     if not a.check and not a.key:
         fail("no settings public key")
@@ -120,6 +122,34 @@ def main():
                   "the Android app reads assets/custom.txt")
         p.append("flutter/lib/models/native_model.dart", "comtech_custom_config.dart", "the settings reader")
         p.write("flutter/assets/custom.txt", "", "an empty assets/custom.txt for the Client Builder to fill")
+
+    if a.console:
+        # the console package sits beside the app; the home tab shows it when
+        # the build's signed settings turn it on
+        src = os.path.join(HERE, "..", "..", "comtech_console")
+        if not os.path.isfile(os.path.join(src, "pubspec.yaml")):
+            fail("the comtech_console package is missing from rdgen")
+        if not a.check:
+            shutil.rmtree("flutter/comtech_console", ignore_errors=True)
+            shutil.copytree(src, "flutter/comtech_console",
+                            ignore=shutil.ignore_patterns("preview", "build", ".dart_tool", "pubspec.lock", "tool", ".idea", "*.iml"))
+        print("ok: the console package")
+        p.replace("flutter/pubspec.yaml",
+                  "  flutter_localizations:\n    sdk: flutter\n",
+                  "  flutter_localizations:\n    sdk: flutter\n  comtech_console:\n    path: ./comtech_console\n",
+                  "the console is a dependency")
+        p.write("flutter/lib/comtech/console_host.dart",
+                open(os.path.join(HERE, "comtech_console_host.dart"), encoding="utf-8").read(),
+                "the console's link to RustDesk")
+        p.replace("flutter/lib/desktop/pages/desktop_tab_page.dart",
+                  "import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';\n",
+                  "import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';\n"
+                  "import 'package:flutter_hbb/comtech/console_host.dart';\n",
+                  "the home tab can show the console")
+        p.replace("flutter/lib/desktop/pages/desktop_tab_page.dart",
+                  "        page: DesktopHomePage(\n          key: const ValueKey(kTabLabelHomePage),\n        )));",
+                  "        page: comtechHomePage(const ValueKey(kTabLabelHomePage))));",
+                  "technician builds open on the console")
 
     print("all Comtech changes " + ("apply" if a.check else "applied"))
 

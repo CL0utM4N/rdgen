@@ -44,14 +44,16 @@ trust_key = '''      - name: Checkout the Comtech patches
         uses: actions/checkout@v4
         with:
           path: .comtech
-          sparse-checkout: .github/patches
+          sparse-checkout: |
+            .github/patches
+            comtech_console
 
       - name: Comtech changes
         shell: bash
         run: |
           # signed settings only, updates from our server, and an installer
           # the Client Builder can brand; see .github/patches/comtech_patch.py
-          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --updates --packer
+          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --updates --packer --console
 
       - name: Remove the set up server tip
         continue-on-error: true
@@ -125,10 +127,12 @@ check_job = """  check-patches:
         uses: actions/checkout@v4
         with:
           path: .comtech
-          sparse-checkout: .github/patches
+          sparse-checkout: |
+            .github/patches
+            comtech_console
       - name: Check the Comtech changes apply
         shell: bash
-        run: python3 .comtech/.github/patches/comtech_patch.py --check --updates --packer
+        run: python3 .comtech/.github/patches/comtech_patch.py --check --updates --packer --console
       - name: Compile check the packer
         shell: bash
         run: |

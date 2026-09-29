@@ -46,7 +46,9 @@ def checkout_patches():
         uses: actions/checkout@v4
         with:
           path: .comtech
-          sparse-checkout: .github/patches
+          sparse-checkout: |
+            .github/patches
+            comtech_console
 
 '''
 
@@ -97,7 +99,9 @@ def check_job(runs_on, flags):
         uses: actions/checkout@v4
         with:
           path: .comtech
-          sparse-checkout: .github/patches
+          sparse-checkout: |
+            .github/patches
+            comtech_console
       - name: Check the Comtech changes apply
         shell: bash
         run: python3 .comtech/.github/patches/comtech_patch.py --check {flags}
@@ -167,7 +171,7 @@ _, ljobs = split_jobs(src)
 build_step = [s for s in split_steps(dict(ljobs)['build-rustdesk-linux'])[1] if step_name(s) == 'Build rustdesk'][0]
 assert placeholder_src in build_step, 'Linux build step changed; update the placeholder'
 build(
-    'generator-linux.yml', 'base-linux.yml', 'Comtech Linux Base Client', '--appimage', 'ubuntu-22.04',
+    'generator-linux.yml', 'base-linux.yml', 'Comtech Linux Base Client', '--appimage --console', 'ubuntu-22.04',
     jobs_keep={'setup', 'generate-bridge-linux', 'build-rustdesk-linux', 'build-appimage', 'cleanup'},
     main_jobs={
         'build-rustdesk-linux': (COMMON_DROP, {
@@ -193,14 +197,14 @@ build(
 
 # --- macOS: RustDesk.app for Apple silicon and Intel ---
 build(
-    'generator-macos.yml', 'base-macos.yml', 'Comtech macOS Base Client', '', 'ubuntu-22.04',
+    'generator-macos.yml', 'base-macos.yml', 'Comtech macOS Base Client', '--console', 'ubuntu-22.04',
     jobs_keep={'setup', 'generate-bridge', 'build-for-macos', 'cleanup'},
     main_jobs={
         'build-for-macos': (COMMON_DROP | {
             'Magick stuff for macOS', 'replace flutter icons', 'ui.rs', 'Embed custom config into the .app bundle',
             'Install rcodesign tool', 'icon svg handling', 'logo handling', 'Sign macOS app bundle',
             'Ad-hoc Sign macOS app bundle (Fallback)', 'Create DMG', 'Rename rustdesk'}, {
-            'allow custom.txt': checkout_patches() + comtech_step(''),
+            'allow custom.txt': checkout_patches() + comtech_step('--console'),
         }, {
             # the server brands and signs the app, so it's sent unsigned
             'Build rustdesk': '''      - name: Pack the base app
