@@ -12,6 +12,7 @@ so a new release that moved the code fails early and clearly.
 """
 import argparse
 import os
+import re
 import shutil
 import sys
 
@@ -37,6 +38,17 @@ class Patcher:
             open(path, "w", encoding="utf-8", newline="\n").write(s)
         print("ok: " + what)
 
+    def sub(self, path, pattern, repl, what, least):
+        """Replace every match of pattern, failing unless at least `least` of them are there."""
+        s = open(path, encoding="utf-8").read()
+        n = len(re.findall(pattern, s))
+        if n < least:
+            fail(f"{what}: RustDesk changed {path} ({n} places, expected {least} or more), "
+                 "so this change needs updating for this version")
+        if not self.check:
+            open(path, "w", encoding="utf-8", newline="\n").write(re.sub(pattern, repl, s))
+        print(f"ok: {what} ({n} places)")
+
     def append(self, path, extra_file, what):
         if not os.path.isfile(path):
             fail(f"{what}: {path} is missing")
@@ -51,6 +63,31 @@ class Patcher:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             open(path, "w", encoding="utf-8", newline="\n").write(content)
         print("ok: " + what)
+
+
+def quote_app_name(p):
+    """Quote the app name where Windows installs put it in a cmd script.
+
+    RustDesk writes the install as a .bat and drops the app name in unquoted,
+    so a name with a space ("Comtech Remote Admin") makes `sc create` take
+    only the first word as an option. The batch file carries on, the install
+    looks fine, and the client ends up with no service: it is then reachable
+    only while its window is open, because the window runs a server of its
+    own. rdgen quotes the registry commands in a workflow step, which base
+    clients can't use: the name is only known when the Client Builder brands
+    the installer, long after the build.
+    """
+    win = "src/platform/windows.rs"
+    p.sub(win, r"sc (create|start|stop|delete) \{app_name\}", r'sc \1 \\"{app_name}\\"',
+          "the service is created under the app's full name", 13)
+    p.replace(win, 'format!("sc start {}", &app_name)', 'format!("sc start \\"{}\\"", &app_name)',
+              "an update restarts the service by its full name")
+    p.sub(win, r"taskkill /F /IM \{app_name\}\.exe", r'taskkill /F /IM \\"{app_name}.exe\\"',
+          "installs and updates can stop the running app", 4)
+    p.sub(win, r"reg (add|delete) \{subkey\}", r'reg \1 \\"{subkey}\\"',
+          "the app is listed in Add or remove programs", 22)
+    p.sub(win, r"reg (add|delete) (HKEY_CLASSES_ROOT\\\\[^ ]*)", r'reg \1 \\"\2\\"',
+          "the app's file type and links are registered", 19)
 
 
 def main():
@@ -70,6 +107,8 @@ def main():
     # custom.txt is only read when signed: trust only our Client Builder's
     # key. (rdgen deletes the check, so anyone could change a client.)
     p.replace("src/common.rs", RUSTDESK_KEY, f'const KEY: &str = "{a.key}";', "settings are signed by our Client Builder")
+
+    quote_app_name(p)
 
     if a.updates:
         p.replace("src/common.rs",
