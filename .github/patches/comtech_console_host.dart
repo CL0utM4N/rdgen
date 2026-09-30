@@ -156,6 +156,7 @@ class ComtechConsolePage extends StatefulWidget {
 
 class _ComtechConsolePageState extends State<ComtechConsolePage> with AutomaticKeepAliveClientMixin {
   static bool _started = false;
+  static bool _askedInstall = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -170,6 +171,36 @@ class _ComtechConsolePageState extends State<ComtechConsolePage> with AutomaticK
         if (mounted) setState(() {});
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptInstall());
+  }
+
+  // Run as the portable exe, the technician app offers to install itself so
+  // it becomes a proper service (needed for unattended and UAC-side work).
+  void _maybePromptInstall() {
+    if (_askedInstall || !(Platform.isWindows || Platform.isMacOS)) return;
+    if (bind.mainIsInstalled()) return;
+    _askedInstall = true;
+    final ctx = rd.globalKey.currentContext ?? context;
+    showDialog(
+      context: ctx,
+      builder: (dctx) => AlertDialog(
+        title: const Text('Install Comtech Remote Admin?'),
+        content: const Text(
+            'Install it on this PC so it runs as a service. Unattended access '
+            'and controlling UAC prompts on the remote side need it installed. '
+            'Windows will ask for administrator permission.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dctx).pop(), child: const Text('Not now')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dctx).pop();
+              bind.installInstallMe(options: 'startmenu desktopicon', path: bind.installInstallPath());
+            },
+            child: const Text('Install'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
