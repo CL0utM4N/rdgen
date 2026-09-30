@@ -33,7 +33,7 @@ def name_of(step):
 
 drop = {
     'Set rdgen value', 'Install ImageMagick on Windows', 'removeNewVersionNotif', 'change appname to custom',
-    'fix registry if appname has a space', 'magick stuff', 'ui.rs icon',
+    'fix install commands if appname has a space', 'magick stuff', 'ui.rs icon',
     'replace flutter icons', 'icon stuff', 'logo stuff', 'Create custom.txt file',
     'Add MSBuild to PATH', 'Build msi', 'zip exe and msi', 'sign exe and msi',
     'unzip exe and msi', 'rename rustdesk.exe to filename.exe',

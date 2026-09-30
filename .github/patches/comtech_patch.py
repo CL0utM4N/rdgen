@@ -88,6 +88,9 @@ def quote_app_name(p):
           "the app is listed in Add or remove programs", 22)
     p.sub(win, r"reg (add|delete) (HKEY_CLASSES_ROOT\\\\[^ ]*)", r'reg \1 \\"\2\\"',
           "the app's file type and links are registered", 19)
+    # the same key, passed positionally: share_rdp and an update's DisplayIcon
+    p.sub(win, r"reg add \{\} /f /v", r'reg add \\"{}\\" /f /v',
+          "share RDP and the update's icon reach the registry", 2)
 
 
 def main():

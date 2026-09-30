@@ -193,7 +193,7 @@ jobs:
           find ./src/lang -name "*.rs" -exec sed -i -e 's|RustDesk|${{ env.appname }}|' {} \;
           sed -i -e 's|RustDesk|${{ env.appname }}|' ./res/msi/Package/License.rtf
 
-      - name: fix registry if appname has a space
+      - name: fix install commands if appname has a space
         if: contains(env.appname, ' ')
         continue-on-error: true
         shell: bash
@@ -212,6 +212,15 @@ jobs:
           sed -i -e 's|{subkey}|\\\"{subkey}\\\"|' ./src/platform/windows.rs
           sed -i -e 's|reg delete HKEY_CLASSES_ROOT\\\\.{ext} /f|reg delete \\\"HKEY_CLASSES_ROOT\\\\.{ext}\\\" /f|' ./src/platform/windows.rs
           sed -i -e 's|reg delete HKEY_CLASSES_ROOT\\\\{ext} /f|reg delete \\\"HKEY_CLASSES_ROOT\\\\{ext}\\\" /f|' ./src/platform/windows.rs
+          sed -i -e 's|reg add {} /f /v|reg add \\\"{}\\\" /f /v|' ./src/platform/windows.rs
+          # without these sc takes only the first word, so the install makes no
+          # service and the client is reachable only while its window is open
+          sed -i -e 's|sc create {app_name}|sc create \\\"{app_name}\\\"|g' ./src/platform/windows.rs
+          sed -i -e 's|sc start {app_name}|sc start \\\"{app_name}\\\"|g' ./src/platform/windows.rs
+          sed -i -e 's|sc stop {app_name}|sc stop \\\"{app_name}\\\"|g' ./src/platform/windows.rs
+          sed -i -e 's|sc delete {app_name}|sc delete \\\"{app_name}\\\"|g' ./src/platform/windows.rs
+          sed -i -e 's|format!("sc start {}", \&app_name)|format!("sc start \\\"{}\\\"", \&app_name)|' ./src/platform/windows.rs
+          sed -i -e 's|taskkill /F /IM {app_name}.exe|taskkill /F /IM \\\"{app_name}.exe\\\"|g' ./src/platform/windows.rs
           
       - name: change company name
         if: env.compname != 'Purslane Ltd'
