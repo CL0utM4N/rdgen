@@ -4,8 +4,8 @@ Base clients are built once per RustDesk release; the Client Builder then
 brands each customer's installer on the server in seconds. Run from the
 RustDesk source folder:
 
-    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--console]
-    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--console]
+    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console]
+    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console]
 
 --check only confirms every change still applies to this RustDesk version,
 so a new release that moved the code fails early and clearly.
@@ -93,6 +93,55 @@ def quote_app_name(p):
           "share RDP and the update's icon reach the registry", 2)
 
 
+def ios_share(p):
+    """Turn RustDesk's sharing side on for iOS, for the broadcast extension.
+
+    RustDesk leaves the server, ID registration and API reporting out of iOS
+    builds, since an iPhone app can't see the screen. A broadcast extension
+    can, so these come back, with frames from comtech_ios_capture.rs.
+    """
+    lib = "src/lib.rs"
+    p.replace(lib,
+              '#[cfg(not(any(target_os = "ios")))]\n/// cbindgen:ignore\nmod server;\n'
+              '#[cfg(not(any(target_os = "ios")))]\npub use self::server::*;\n',
+              '/// cbindgen:ignore\nmod server;\npub use self::server::*;\n',
+              "iOS has the sharing server")
+    p.replace(lib,
+              '#[cfg(not(any(target_os = "ios")))]\nmod rendezvous_mediator;\n'
+              '#[cfg(not(any(target_os = "ios")))]\npub use self::rendezvous_mediator::*;\n',
+              'mod rendezvous_mediator;\npub use self::rendezvous_mediator::*;\n'
+              '#[cfg(target_os = "ios")]\nmod comtech_ios;\n',
+              "iOS registers its ID")
+    p.replace(lib, '#[cfg(not(any(target_os = "ios")))]\npub mod ipc;\n', 'pub mod ipc;\n', "iOS has ipc for the server")
+    p.write("src/comtech_ios.rs", open(os.path.join(HERE, "comtech_ios_share.rs"), encoding="utf-8").read(),
+            "what the broadcast extension calls")
+
+    server = "src/server.rs"
+    p.replace(server,
+              '    #[cfg(not(target_os = "ios"))]\n    {\n        server.add_service(Box::new(display_service::new()));\n',
+              '    server.add_service(Box::new(display_service::new()));\n    #[cfg(not(target_os = "ios"))]\n    {\n',
+              "iOS shares its screen")
+    p.replace("src/rendezvous_mediator.rs",
+              '        #[cfg(target_os = "android")]\n        let start_lan_listening = true;\n',
+              '        #[cfg(target_os = "android")]\n        let start_lan_listening = true;\n'
+              '        #[cfg(target_os = "ios")]\n        let start_lan_listening = false;\n',
+              "iOS doesn't listen on the LAN")
+    p.sub("src/hbbs_http/sync.rs", r'(?m)^#\[cfg\(not\(any\(target_os = "ios"\)\)\)\]\n|^#\[cfg\(not\(target_os = "ios"\)\)\]\n', '',
+          "iOS reports to the API", 7)
+
+    scrap = "libs/scrap/src/common/"
+    p.replace(scrap + "mod.rs",
+              '    } else if #[cfg(target_os = "android")] {\n        mod android;\n        pub use self::android::*;\n    }',
+              '    } else if #[cfg(target_os = "android")] {\n        mod android;\n        pub use self::android::*;\n'
+              '    } else if #[cfg(target_os = "ios")] {\n        mod ios;\n        pub use self::ios::*;\n    }',
+              "iOS takes frames from the extension")
+    p.sub(scrap + "mod.rs", r'(?m)^[ \t]*#\[cfg\(not\(any\(target_os = "ios"\)\)\)\]\n', '', "iOS can capture", 4)
+    p.sub(scrap + "convert.rs", r'(?m)^#\[cfg\(not\(target_os = "ios"\)\)\]\n', '', "iOS converts frames", 3)
+    p.sub(scrap + "codec.rs", r'(?m)^#\[cfg\(not\(target_os = "ios"\)\)\]\n(?=pub fn test_av1)', '', "iOS tests AV1 like others", 1)
+    p.write(scrap + "ios.rs", open(os.path.join(HERE, "comtech_ios_capture.rs"), encoding="utf-8").read(),
+            "the iOS capturer")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", default="")
@@ -101,6 +150,7 @@ def main():
     ap.add_argument("--packer", action="store_true", help="Windows installer reads its files from the end of the exe")
     ap.add_argument("--android", action="store_true", help="Android reads its settings from assets/custom.txt")
     ap.add_argument("--ios", action="store_true", help="iOS reads its settings from assets/custom.txt")
+    ap.add_argument("--ios-share", action="store_true", help="iOS can share its screen from a broadcast extension")
     ap.add_argument("--appimage", action="store_true", help="Linux reads settings attached to its AppImage")
     ap.add_argument("--console", action="store_true", help="technician builds open the Comtech console")
     a = ap.parse_args()
@@ -169,6 +219,9 @@ def main():
                   "the phone app reads assets/custom.txt")
         p.append("flutter/lib/models/native_model.dart", "comtech_custom_config.dart", "the settings reader")
         p.write("flutter/assets/custom.txt", "", "an empty assets/custom.txt for the Client Builder to fill")
+
+    if a.ios_share:
+        ios_share(p)
 
     if a.console:
         # the console package sits beside the app; the home tab shows it when

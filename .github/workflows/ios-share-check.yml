@@ -1,0 +1,91 @@
+# Comtech fork: checks the iOS screen sharing changes compile, without
+# building or uploading an app. For working on --ios-share; needs no secrets.
+name: Comtech iOS sharing check
+run-name: Comtech iOS sharing check ${{ inputs.version }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'RustDesk version'
+        required: true
+        default: '1.4.9'
+        type: string
+
+env:
+  RUST_VERSION: "1.75"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+    with:
+      version: ${{ inputs.version }}
+
+  check:
+    runs-on: macos-14
+    needs: [generate-bridge]
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install dependencies
+        run: brew install nasm yasm
+
+      - name: Checkout RustDesk
+        uses: actions/checkout@v4
+        with:
+          repository: rustdesk/rustdesk
+          ref: refs/tags/${{ inputs.version }}
+          submodules: recursive
+
+      - name: Checkout the Comtech patches
+        uses: actions/checkout@v4
+        with:
+          path: .comtech
+          sparse-checkout: |
+            .github/patches
+            comtech_console
+
+      - name: Comtech changes
+        run: python3 .comtech/.github/patches/comtech_patch.py --key "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=" --ios --ios-share --console
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: $VCPKG_ROOT/vcpkg install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-apple-ios
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rustdesk-lib-cache-ios-share
+          key: aarch64-apple-ios
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Check
+        run: |
+          set -o pipefail
+          cargo check --locked --features flutter,hwcodec --release --target aarch64-apple-ios --lib --message-format short 2>&1 | tee check.log
+
+      - name: Errors
+        if: failure()
+        run: grep -E "^(src|libs)/.*(error|warning: unused)" check.log | head -200 || true
