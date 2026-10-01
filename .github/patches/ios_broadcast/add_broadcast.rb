@@ -42,7 +42,7 @@ ext.build_configurations.each do |c|
   s['ENABLE_BITCODE'] = 'NO'
   s['DEAD_CODE_STRIPPING'] = 'YES'
   s['STRIP_STYLE'] = 'non-global'
-  s['APPLICATION_EXTENSION_API_ONLY'] = 'NO'
+  s['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
   s['CODE_SIGN_STYLE'] = 'Manual'
   s['CODE_SIGN_IDENTITY'] = ''
   s['CODE_SIGNING_REQUIRED'] = 'NO'
