@@ -18,20 +18,125 @@ fn cstr(p: *const c_char) -> String {
     unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
 }
 
+/// The ID screen sharing uses, from the phone's identifierForVendor, which the
+/// app and its extension share. The app shows the same number (FNV-1a of the
+/// uppercase UUID text, into RustDesk's mobile ID range), so the user can read
+/// it out even though the extension has no screen of its own.
+pub fn share_id(vendor_id: &str) -> Option<String> {
+    let v = vendor_id.trim().to_uppercase();
+    if v.is_empty() {
+        return None;
+    }
+    let mut h: u32 = 0x811c9dc5;
+    for b in v.bytes() {
+        h ^= b as u32;
+        h = h.wrapping_mul(0x01000193);
+    }
+    Some((1_000_000_000u64 + (h as u64 % 1_000_000_000)).to_string())
+}
+
 /// Starts sharing. app_dir is a folder the extension can write to; custom is
-/// the signed settings from the app's assets/custom.txt.
+/// the signed settings from the app's assets/custom.txt; vendor_id is the
+/// phone's identifierForVendor.
 #[no_mangle]
-pub extern "C" fn comtech_share_start(app_dir: *const c_char, custom: *const c_char) {
+pub extern "C" fn comtech_share_start(app_dir: *const c_char, custom: *const c_char, vendor_id: *const c_char) {
     let app_dir = cstr(app_dir);
     let custom = cstr(custom);
+    let vendor_id = cstr(vendor_id);
     START.call_once(move || {
-        *config::APP_DIR.write().unwrap() = app_dir;
+        remote_log::start();
+        *config::APP_DIR.write().unwrap() = app_dir.clone();
         if !custom.trim().is_empty() {
             crate::read_custom_client(custom.trim());
+        } else {
+            log::warn!("comtech: no settings found in the app; sharing uses the built-in server");
         }
-        log::info!("comtech: iOS sharing starting as {}", config::Config::get_id());
+        if let Some(id) = share_id(&vendor_id) {
+            if config::Config::get_id() != id {
+                config::Config::set_id(&id);
+            }
+        }
+        log::info!(
+            "comtech: iOS sharing starting as {} (server {:?}, api {:?}, dir {})",
+            config::Config::get_id(),
+            config::Config::get_option("custom-rendezvous-server"),
+            config::Config::get_option("api-server"),
+            app_dir
+        );
         std::thread::spawn(|| crate::start_server(true));
     });
+}
+
+/// The broadcast stopped; send what's left of the log
+#[no_mangle]
+pub extern "C" fn comtech_share_stop() {
+    log::info!("comtech: iOS sharing stopped");
+    remote_log::flush();
+}
+
+/// The extension has no screen and its files can't be read from outside, so
+/// it sends its log to the API server, which keeps it with the device's ID.
+mod remote_log {
+    use hbb_common::{config, log};
+    use std::sync::Mutex;
+
+    lazy_static::lazy_static! {
+        static ref LINES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    }
+
+    struct Logger;
+
+    impl log::Log for Logger {
+        fn enabled(&self, m: &log::Metadata) -> bool {
+            m.level() <= log::Level::Info
+        }
+
+        fn log(&self, r: &log::Record) {
+            if !self.enabled(r.metadata()) {
+                return;
+            }
+            let mut l = LINES.lock().unwrap();
+            if l.len() < 400 {
+                l.push(format!("{} {}: {}", r.level(), r.target(), r.args()));
+            }
+        }
+
+        fn flush(&self) {}
+    }
+
+    pub fn start() {
+        if log::set_boxed_logger(Box::new(Logger)).is_ok() {
+            log::set_max_level(log::LevelFilter::Info);
+        }
+        std::thread::spawn(|| loop {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            flush();
+        });
+    }
+
+    pub fn flush() {
+        let lines: Vec<String> = std::mem::take(&mut *LINES.lock().unwrap());
+        if lines.is_empty() {
+            return;
+        }
+        let api = crate::common::get_api_server(
+            config::Config::get_option("api-server"),
+            config::Config::get_option("custom-rendezvous-server"),
+        );
+        if api.is_empty() {
+            return;
+        }
+        let body = serde_json::json!({
+            "id": config::Config::get_id(),
+            "uuid": crate::encode64(hbb_common::get_uuid()),
+            "lines": lines,
+        })
+        .to_string();
+        let url = format!("{}/api/comtech/ios-log", api.trim_end_matches('/'));
+        if let Ok(rt) = hbb_common::tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            let _ = rt.block_on(crate::post_request(url, body, "Content-Type: application/json"));
+        }
+    }
 }
 
 /// This device's RustDesk ID, written into buf (with a trailing NUL)

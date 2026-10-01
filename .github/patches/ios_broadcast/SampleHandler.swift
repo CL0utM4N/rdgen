@@ -5,9 +5,13 @@
 import CoreMedia
 import CoreVideo
 import ReplayKit
+import UIKit
 
 @_silgen_name("comtech_share_start")
-func comtech_share_start(_ appDir: UnsafePointer<CChar>, _ custom: UnsafePointer<CChar>)
+func comtech_share_start(_ appDir: UnsafePointer<CChar>, _ custom: UnsafePointer<CChar>, _ vendorId: UnsafePointer<CChar>)
+
+@_silgen_name("comtech_share_stop")
+func comtech_share_stop()
 
 @_silgen_name("comtech_share_frame_nv12")
 func comtech_share_frame_nv12(_ y: UnsafePointer<UInt8>, _ yStride: Int32,
@@ -27,7 +31,13 @@ class SampleHandler: RPBroadcastSampleHandler {
         let app = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
         let customUrl = app.appendingPathComponent("Frameworks/App.framework/flutter_assets/assets/custom.txt")
         let custom = (try? String(contentsOf: customUrl, encoding: .utf8)) ?? ""
-        comtech_share_start(dir.path, custom)
+        // the app shows an ID made from this, so the user can read it out
+        let vendorId = UIDevice.current.identifierForVendor?.uuidString ?? ""
+        comtech_share_start(dir.path, custom, vendorId)
+    }
+
+    override func broadcastFinished() {
+        comtech_share_stop()
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {

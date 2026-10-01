@@ -115,6 +115,18 @@ def ios_share(p):
     p.replace(lib, '#[cfg(not(any(target_os = "ios")))]\npub mod ipc;\n', 'pub mod ipc;\n', "iOS has ipc for the server")
     p.write("src/comtech_ios.rs", open(os.path.join(HERE, "comtech_ios_share.rs"), encoding="utf-8").read(),
             "what the broadcast extension calls")
+    # the app shows the ID the extension shares under, and how to start it
+    p.write("flutter/lib/comtech/ios_share.dart",
+            open(os.path.join(HERE, "comtech_ios_share_card.dart"), encoding="utf-8").read(),
+            "the share this screen card")
+    page = "flutter/lib/mobile/pages/connection_page.dart"
+    p.replace(page, "import 'home_page.dart';\n",
+              "import 'home_page.dart';\nimport 'package:flutter_hbb/comtech/ios_share.dart';\n",
+              "the connection page can show the share card")
+    p.replace(page, "            Obx(() => _buildUpdateUI(stateGlobal.updateUrl.value)),\n          _buildRemoteIDTextField(),\n",
+              "            Obx(() => _buildUpdateUI(stateGlobal.updateUrl.value)),\n"
+              "          if (isIOS) const ComtechShareCard(),\n          _buildRemoteIDTextField(),\n",
+              "iPhones show their share ID")
 
     server = "src/server.rs"
     p.replace(server,
