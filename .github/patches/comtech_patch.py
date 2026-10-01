@@ -148,6 +148,10 @@ def ios_share(p):
               '    #[cfg(any(target_os = "android", target_os = "ios"))]\n    use hbb_common::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};\n\n'
               '    #[cfg(any(target_os = "android", target_os = "ios"))]\n    pub fn start_channel(',
               "iOS starts the connection manager like Android")
+    p.replace("src/ui_cm_interface.rs",
+              '#[cfg(target_os = "android")]\n#[tokio::main(flavor = "current_thread")]\npub async fn start_listen<',
+              '#[cfg(any(target_os = "android", target_os = "ios"))]\n#[tokio::main(flavor = "current_thread")]\npub async fn start_listen<',
+              "iOS listens for connections like Android")
     p.append("src/platform/mod.rs", "comtech_ios_platform.rs", "iOS platform basics for the server")
 
     scrap = "libs/scrap/src/common/"
