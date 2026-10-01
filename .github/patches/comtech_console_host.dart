@@ -2,8 +2,8 @@
 // flutter/lib/comtech/console_host.dart by comtech_patch.py --console.
 //
 // Technician builds carry the signed setting comtech-console = Y; their home
-// tab is the console, with the usual RustDesk home page under Client. Every
-// other build shows the normal home page.
+// tab (on phones, the whole app) is the console, with the usual RustDesk home
+// page under Client. Every other build shows the normal home page.
 import 'dart:io';
 
 import 'package:comtech_console/comtech_console.dart';
@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart' as rd;
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/mobile/pages/home_page.dart';
+import 'package:flutter_hbb/mobile/pages/settings_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
 bool comtechConsoleEnabled() {
@@ -23,6 +25,9 @@ bool comtechConsoleEnabled() {
 
 /// The home tab: the console for technician builds, else the usual page.
 Widget comtechHomePage(Key key) => comtechConsoleEnabled() ? ComtechConsolePage(key: key) : DesktopHomePage(key: key);
+
+/// The phone app: the console for technician builds, else the usual app.
+Widget comtechMobileHome() => comtechConsoleEnabled() ? const ComtechConsolePage() : HomePage();
 
 /// The console's colours for the RustDesk home page under Client: its
 /// widgets take them from the theme, so the layout stays as RustDesk has it.
@@ -100,7 +105,7 @@ class RustDeskConsoleHost extends ConsoleHost {
   Widget? buildClientPage(BuildContext context) => Builder(
         builder: (context) => Theme(
           data: comtechClientTheme(Theme.of(context)),
-          child: const DesktopHomePage(key: ValueKey('comtech-client')),
+          child: rd.isMobile ? HomePage() : const DesktopHomePage(key: ValueKey('comtech-client')),
         ),
       );
 
@@ -141,10 +146,23 @@ class RustDeskConsoleHost extends ConsoleHost {
   void onThemeChanged(bool dark) => rd.MyTheme.changeDarkMode(dark ? ThemeMode.dark : ThemeMode.light);
 
   @override
-  void openClientSettings() => DesktopTabPage.onAddSetting();
+  void openClientSettings() {
+    if (!rd.isMobile) return DesktopTabPage.onAddSetting();
+    final ctx = rd.globalKey.currentContext;
+    if (ctx == null) return;
+    Navigator.of(ctx).push(MaterialPageRoute(
+      builder: (_) => Scaffold(appBar: AppBar(title: Text(rd.translate('Settings'))), body: SettingsPage()),
+    ));
+  }
 
   @override
-  String get platform => Platform.isMacOS ? 'mac' : (Platform.isLinux ? 'linux' : 'windows');
+  String get platform => Platform.isAndroid
+      ? 'android'
+      : Platform.isIOS
+          ? 'ios'
+          : Platform.isMacOS
+              ? 'mac'
+              : (Platform.isLinux ? 'linux' : 'windows');
 }
 
 class ComtechConsolePage extends StatefulWidget {

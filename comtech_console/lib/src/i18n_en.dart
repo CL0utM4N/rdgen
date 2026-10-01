@@ -733,7 +733,7 @@ const Map<String, List<String>> kEnglish = {
   'Event_client_base_ready': ['a new base client is ready for instant builds'],
   'Event_client_base_failed': ['a base client build failed'],
   'TechnicianApp': ['Comtech Remote Admin'],
-  'TechnicianAppHelp': ['Our own staff\'s RustDesk app, which opens on this console with the RustDesk home page under Client. Staff sign in with their usual account. The links below always give the newest version, and it\'s remade automatically when a new base client is built; installed Windows copies update themselves.'],
+  'TechnicianAppHelp': ['Our own staff\'s RustDesk app, which opens on this console with the RustDesk home page under Client. Staff sign in with their usual account. On iPhones and iPads it\'s installed with AltStore. The links below always give the newest version, and it\'s remade automatically when a new base client is built; installed Windows copies update themselves.'],
   'TechnicianNotMade': ['Not made yet'],
   'TechnicianMake': ['Make'],
   'TechnicianRemake': ['Remake'],

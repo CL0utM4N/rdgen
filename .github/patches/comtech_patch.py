@@ -4,8 +4,8 @@ Base clients are built once per RustDesk release; the Client Builder then
 brands each customer's installer on the server in seconds. Run from the
 RustDesk source folder:
 
-    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--console]
-    python comtech_patch.py --check [--updates] [--packer] [--android] [--console]
+    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--console]
+    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--console]
 
 --check only confirms every change still applies to this RustDesk version,
 so a new release that moved the code fails early and clearly.
@@ -100,8 +100,9 @@ def main():
     ap.add_argument("--updates", action="store_true", help="updates come from our server (Windows)")
     ap.add_argument("--packer", action="store_true", help="Windows installer reads its files from the end of the exe")
     ap.add_argument("--android", action="store_true", help="Android reads its settings from assets/custom.txt")
+    ap.add_argument("--ios", action="store_true", help="iOS reads its settings from assets/custom.txt")
     ap.add_argument("--appimage", action="store_true", help="Linux reads settings attached to its AppImage")
-    ap.add_argument("--console", action="store_true", help="technician builds open the Comtech console (desktop)")
+    ap.add_argument("--console", action="store_true", help="technician builds open the Comtech console")
     a = ap.parse_args()
     if not a.check and not a.key:
         fail("no settings public key")
@@ -151,17 +152,21 @@ def main():
         p.append("src/common.rs", "comtech_appimage.rs", "the AppImage settings reader")
 
     if a.android:
-        # the service and the app both read the settings the Client Builder
-        # puts in the APK, instead of compiled in text
-        p.replace("flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt",
-                  'FFI.startServer(configPath, "")',
-                  'FFI.startServer(configPath, try { applicationContext.assets.open("flutter_assets/assets/custom.txt")'
-                  '.bufferedReader().use { it.readText().trim() } } catch (e: Exception) { "" })',
-                  "the Android service reads assets/custom.txt")
+        # the service reads the settings the Client Builder puts in the APK,
+        # instead of compiled in text
+        # (1.5.0 added a home folder argument before the settings)
+        p.sub("flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt",
+              r'FFI\.startServer\(configPath, (homePath, )?""\)',
+              r'FFI.startServer(configPath, \1try { applicationContext.assets.open("flutter_assets/assets/custom.txt")'
+              r'.bufferedReader().use { it.readText().trim() } } catch (e: Exception) { "" })',
+              "the Android service reads assets/custom.txt", 1)
+
+    if a.android or a.ios:
+        # the app reads the settings the Client Builder puts in the APK or IPA
         p.replace("flutter/lib/models/native_model.dart",
                   "        customClientConfig: '',",
                   "        customClientConfig: await _comtechCustomConfig(),",
-                  "the Android app reads assets/custom.txt")
+                  "the phone app reads assets/custom.txt")
         p.append("flutter/lib/models/native_model.dart", "comtech_custom_config.dart", "the settings reader")
         p.write("flutter/assets/custom.txt", "", "an empty assets/custom.txt for the Client Builder to fill")
 
@@ -183,6 +188,13 @@ def main():
         p.write("flutter/lib/comtech/console_host.dart",
                 open(os.path.join(HERE, "comtech_console_host.dart"), encoding="utf-8").read(),
                 "the console's link to RustDesk")
+        # on phones the console is the whole app
+        p.replace("flutter/lib/main.dart", "import 'mobile/pages/home_page.dart';\n",
+                  "import 'mobile/pages/home_page.dart';\nimport 'comtech/console_host.dart';\n",
+                  "the phone app can show the console")
+        p.replace("flutter/lib/main.dart", "                  ? WebHomePage()\n                  : HomePage(),",
+                  "                  ? WebHomePage()\n                  : comtechMobileHome(),",
+                  "technician phone apps open on the console")
         p.replace("flutter/lib/desktop/pages/desktop_tab_page.dart",
                   "import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';\n",
                   "import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';\n"

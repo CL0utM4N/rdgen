@@ -175,7 +175,7 @@ build(
     jobs_keep={'setup', 'generate-bridge-linux', 'build-rustdesk-linux', 'build-appimage', 'cleanup'},
     main_jobs={
         'build-rustdesk-linux': (COMMON_DROP, {
-            'allow custom.txt': checkout_patches() + comtech_step('--appimage'),
+            'allow custom.txt': checkout_patches() + comtech_step('--appimage --console'),
             'Build rustdesk': build_step.replace(placeholder_src, placeholder_new),
         }, {
             'Rename archlinux package': upload_step([
@@ -223,13 +223,13 @@ build(
 
 # --- Android: an APK per processor type ---
 build(
-    'generator-android.yml', 'base-android.yml', 'Comtech Android Base Client', '--android', 'ubuntu-22.04',
+    'generator-android.yml', 'base-android.yml', 'Comtech Android Base Client', '--android --console', 'ubuntu-22.04',
     jobs_keep={'setup', 'generate-bridge-linux', 'build-rustdesk-android', 'deploy', 'cleanup'},
     main_jobs={
         'build-rustdesk-android': (COMMON_DROP | {
             'Embed custom config for Android', 'replace flutter icons', 'icons', 'Sign app APK',
             'Prefer signed APK when available'}, {
-            'allow custom.txt': checkout_patches() + comtech_step('--android'),
+            'allow custom.txt': checkout_patches() + comtech_step('--android --console'),
         }, {
             # the server signs it with its own key once branded
             'Build rustdesk': upload_step([(f'./signed-apk/rustdesk-{ARCH}.apk', f'{ARCH}.apk')]),

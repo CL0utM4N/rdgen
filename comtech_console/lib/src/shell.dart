@@ -11,6 +11,9 @@ import 'widgets/dialog.dart';
 
 const clientRoute = 'Client';
 
+/// Phones and narrow windows: the sidebar slides out from a menu button.
+bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < 720;
+
 /// The console: sidebar, header and the current page, laid out like the web
 /// console. The RustDesk home page sits under Client.
 class ConsoleShell extends StatefulWidget {
@@ -52,6 +55,7 @@ class _ConsoleShellState extends State<ConsoleShell> {
       data: consoleTheme(con.dark),
       child: Builder(builder: (context) {
         final c = context.ct;
+        final narrow = isNarrow(context);
         clientPage ??= con.host.buildClientPage(context);
         final onClient = con.route == clientRoute || (!con.signedIn && con.route == clientRoute);
         Widget content;
@@ -65,7 +69,7 @@ class _ConsoleShellState extends State<ConsoleShell> {
             controller: scroll,
             child: SingleChildScrollView(
               controller: scroll,
-              padding: const EdgeInsets.fromLTRB(28, 24, 28, 32),
+              padding: narrow ? const EdgeInsets.fromLTRB(14, 16, 14, 24) : const EdgeInsets.fromLTRB(28, 24, 28, 32),
               child: KeyedSubtree(
                 key: ValueKey(con.nav),
                 child: def?.builder?.call(context) ?? Muted(T('NoAccess')),
@@ -73,16 +77,18 @@ class _ConsoleShellState extends State<ConsoleShell> {
             ),
           );
         }
-        return Material(
-          color: c.bg,
+        return Scaffold(
+          backgroundColor: c.bg,
+          drawer: narrow ? Drawer(width: 264, backgroundColor: c.sidebar, shape: const RoundedRectangleBorder(), child: const _Sidebar(drawer: true)) : null,
+          body: SafeArea(
           child: DefaultTextStyle(
             style: TextStyle(fontSize: 14, color: c.text, fontFamily: DefaultTextStyle.of(context).style.fontFamily),
             child: Stack(children: [
               Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const _Sidebar(),
+                if (!narrow) const _Sidebar(),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    if (con.signedIn || onClient) const _Header(),
+                    if (con.signedIn || onClient || narrow) const _Header(),
                     Expanded(
                       child: Stack(children: [
                         // the client page stays alive while other pages are shown
@@ -107,6 +113,7 @@ class _ConsoleShellState extends State<ConsoleShell> {
               const ToastLayer(),
             ]),
           ),
+          ),
         );
       }),
     );
@@ -114,13 +121,15 @@ class _ConsoleShellState extends State<ConsoleShell> {
 }
 
 class _Sidebar extends StatelessWidget {
-  const _Sidebar();
+  /// in the slide-out menu on phones: never collapsed
+  final bool drawer;
+  const _Sidebar({this.drawer = false});
 
   @override
   Widget build(BuildContext context) {
     final c = context.ct;
     final con = Console.I;
-    final collapsed = con.sideCollapsed;
+    final collapsed = con.sideCollapsed && !drawer;
     final items = <Widget>[];
     if (!con.signedIn) {
       items.add(_Item(name: clientRoute, title: T('Client'), icon: Icons.screen_share_outlined, collapsed: collapsed));
@@ -266,7 +275,10 @@ class _ItemState extends State<_Item> {
       onEnter: (_) => setState(() => hover = true),
       onExit: (_) => setState(() => hover = false),
       child: GestureDetector(
-        onTap: () => Console.I.go(widget.name),
+        onTap: () {
+          Scaffold.maybeOf(context)?.closeDrawer();
+          Console.I.go(widget.name);
+        },
         child: Container(
           height: 40,
           margin: const EdgeInsets.symmetric(vertical: 2),
@@ -304,15 +316,18 @@ class _Header extends StatelessWidget {
     final con = Console.I;
     final def = routeByName(con.route);
     final initials = (con.displayName.isEmpty ? '?' : con.displayName).characters.take(2).toString().toUpperCase();
+    final narrow = isNarrow(context);
     return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 28),
+      height: narrow ? 56 : 64,
+      padding: EdgeInsets.symmetric(horizontal: narrow ? 8 : 28),
       decoration: BoxDecoration(color: c.bg, border: Border(bottom: BorderSide(color: c.border))),
       child: Row(children: [
-        CtIconButton(con.sideCollapsed ? Icons.menu_open : Icons.menu, tooltip: T('Menu'), onPressed: con.toggleSide),
-        const SizedBox(width: 14),
+        narrow
+            ? CtIconButton(Icons.menu, tooltip: T('Menu'), onPressed: () => Scaffold.of(context).openDrawer())
+            : CtIconButton(con.sideCollapsed ? Icons.menu_open : Icons.menu, tooltip: T('Menu'), onPressed: con.toggleSide),
+        SizedBox(width: narrow ? 8 : 14),
         Expanded(
-          child: Text(con.route == clientRoute ? T('Client') : (def == null ? '' : T(def.title)),
+          child: Text(con.route == clientRoute ? T('Client') : (!con.signedIn ? T('Login') : (def == null ? '' : T(def.title))),
               overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: c.text)),
         ),
         Tooltip(
@@ -325,10 +340,10 @@ class _Header extends StatelessWidget {
             inactiveText: '☀',
           ),
         ),
-        const SizedBox(width: 16),
+        SizedBox(width: narrow ? 8 : 16),
         CtIconButton(Icons.settings_outlined, tooltip: T('ClientSettings'), onPressed: con.host.openClientSettings, size: 32),
         if (con.signedIn) ...[
-          const SizedBox(width: 16),
+          SizedBox(width: narrow ? 8 : 16),
           PopupMenuButton<String>(
             tooltip: '',
             offset: const Offset(0, 44),
@@ -359,15 +374,17 @@ class _Header extends StatelessWidget {
                 decoration: BoxDecoration(color: c.primary, shape: BoxShape.circle),
                 child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
               ),
-              Padding(
-                padding: const EdgeInsets.only(left: 10, right: 6),
-                child: Text(con.displayName, style: TextStyle(fontWeight: FontWeight.w500, color: c.text)),
-              ),
-              Icon(Icons.keyboard_arrow_down, size: 16, color: c.text2),
+              if (!narrow) ...[
+                Padding(
+                  padding: const EdgeInsets.only(left: 10, right: 6),
+                  child: Text(con.displayName, style: TextStyle(fontWeight: FontWeight.w500, color: c.text)),
+                ),
+                Icon(Icons.keyboard_arrow_down, size: 16, color: c.text2),
+              ],
             ]),
           ),
-        ] else ...[
-          const SizedBox(width: 16),
+        ] else if (con.route == clientRoute) ...[
+          SizedBox(width: narrow ? 8 : 16),
           CtButton(T('Login'), tone: Tone.primary, onPressed: () => con.go('Login')),
         ],
       ]),

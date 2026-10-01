@@ -21,6 +21,7 @@ const buildPlatforms = [
   ('linux', 'Linux'),
   ('macos', 'macOS'),
   ('android', 'Android'),
+  ('ios', 'iOS'),
 ];
 const platformHelp = {'macos': 'PlatformHelpMacos', 'android': 'PlatformHelpAndroid', 'linux': 'PlatformHelpLinux'};
 const buildImages = [('icon', 'AppIcon'), ('logo', 'AppLogo'), ('privacy', 'PrivacyScreen')];
@@ -229,7 +230,7 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
             required: true,
             help: !inst && platformHelp[f['platform']] != null ? T(platformHelp[f['platform']]!) : null,
           ),
-          item(T('InstantBuild'), Align(alignment: Alignment.centerLeft, child: CtSwitch(value: f['instant'] == true, onChanged: cp?['ready'] == true ? (v) => set(() => f['instant'] = v) : null)),
+          item(T('InstantBuild'), Align(alignment: Alignment.centerLeft, child: CtSwitch(value: f['instant'] == true, onChanged: cp?['ready'] == true && f['platform'] != 'ios' ? (v) => set(() => f['instant'] = v) : null)),
               help: instantHelp()),
           if (inst && '${cp!['note'] ?? ''}'.isNotEmpty) note('${cp['note']}'),
           item(
