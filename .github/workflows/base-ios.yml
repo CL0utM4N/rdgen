@@ -44,7 +44,7 @@ jobs:
             comtech_console
       - name: Check the Comtech changes apply
         shell: bash
-        run: python3 .comtech/.github/patches/comtech_patch.py --check --ios --console
+        run: python3 .comtech/.github/patches/comtech_patch.py --check --ios --ios-share --console
 
   setup:
     uses: ./.github/workflows/fetch-encrypted-secrets.yml
@@ -171,7 +171,7 @@ jobs:
         shell: bash
         run: |
           # signed settings only; see .github/patches/comtech_patch.py
-          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --ios --console
+          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --ios --ios-share --console
           curl -fsSL -o removeSetupServerTip.diff https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/removeSetupServerTip.diff
           git apply removeSetupServerTip.diff || echo "::warning::set up server tip patch did not apply"
 
@@ -230,12 +230,15 @@ jobs:
       - name: Build rustdesk
         shell: bash
         run: |
+          # the broadcast extension that shares the screen
+          ruby .comtech/.github/patches/ios_broadcast/add_broadcast.rb
           pushd flutter
           flutter build ipa --release --no-codesign
           popd
           app=$(ls -d flutter/build/ios/archive/Runner.xcarchive/Products/Applications/*.app | head -1)
           [ -n "$app" ] || { echo "::error::no app in the archive"; exit 1; }
           test -f "$app/Frameworks/App.framework/flutter_assets/assets/custom.txt" || { echo "::error::assets/custom.txt is missing from the app"; exit 1; }
+          test -d "$app/PlugIns/ComtechBroadcast.appex" || { echo "::error::the screen sharing extension is missing from the app"; exit 1; }
           rm -rf ipa && mkdir -p ipa/Payload && cp -R "$app" ipa/Payload/
           (cd ipa && COPYFILE_DISABLE=1 zip -qry ../base.ipa Payload)
           ls -l base.ipa
