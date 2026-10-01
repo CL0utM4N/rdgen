@@ -59,5 +59,17 @@ app.build_phases.delete(embed)
 at = app.build_phases.index { |p| p.display_name == 'Embed Frameworks' } || app.build_phases.index { |p| p.display_name == 'Resources' }
 app.build_phases.insert(at + 1, embed)
 
+# the app can open the broadcast picker itself (Start sharing)
+runner_dir = File.join(ios, 'Runner')
+FileUtils.cp(File.join(here, 'ComtechBroadcastPicker.swift'), runner_dir)
+runner_group = proj.main_group.find_subpath('Runner', false) or abort('no Runner group')
+app.add_file_references([runner_group.new_file('ComtechBroadcastPicker.swift')])
+app.add_system_framework('ReplayKit')
+delegate = File.join(runner_dir, 'AppDelegate.swift')
+code = File.read(delegate)
+hook = 'GeneratedPluginRegistrant.register(with: self)'
+abort('AppDelegate.swift changed; update add_broadcast.rb') unless code.include?(hook)
+File.write(delegate, code.sub(hook, hook + "\n    ComtechBroadcastPicker.register(with: self)"))
+
 proj.save
 puts "added the ComtechBroadcast extension (#{name} #{build})"

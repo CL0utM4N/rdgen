@@ -36,8 +36,23 @@ class ComtechShareCard extends StatefulWidget {
   State<ComtechShareCard> createState() => _ComtechShareCardState();
 }
 
+const _broadcast = MethodChannel('comtech/broadcast');
+
 class _ComtechShareCardState extends State<ComtechShareCard> {
   String? id;
+  String? problem;
+
+  Future<void> _start() async {
+    try {
+      final r = await _broadcast.invokeMethod<String>('start');
+      if (r == 'missing') {
+        setState(() => problem = "Screen sharing isn't in this copy of the app. The tool used to install it may have "
+            'removed it; ask your technician for a new copy.');
+      }
+    } catch (_) {
+      setState(() => problem = "Screen sharing couldn't be started on this device.");
+    }
+  }
 
   @override
   void initState() {
@@ -71,10 +86,20 @@ class _ComtechShareCardState extends State<ComtechShareCard> {
           ]),
           const SizedBox(height: 4),
           Text(
-            'To let your technician see this screen, open Control Center, press and hold Screen Recording, '
-            'choose this app and tap Start Broadcast. Give them the number above.',
+            'Give your technician the number above, then tap Start sharing and Start Broadcast. '
+            'You can also start it from Control Center: press and hold Screen Recording and choose this app.',
             style: theme.textTheme.bodySmall,
           ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: _start,
+            icon: const Icon(Icons.screen_share_outlined, size: 18),
+            label: const Text('Start sharing'),
+          ),
+          if (problem != null) ...[
+            const SizedBox(height: 8),
+            Text(problem!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+          ],
         ]),
       ),
     );
