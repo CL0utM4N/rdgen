@@ -10,6 +10,11 @@ on:
         required: true
         default: '1.4.9'
         type: string
+      full:
+        description: 'Also build the app with the extension'
+        required: false
+        default: false
+        type: boolean
 
 env:
   RUST_VERSION: "1.75"
@@ -86,7 +91,26 @@ jobs:
           set -o pipefail
           cargo check --locked --features flutter,hwcodec --release --target aarch64-apple-ios --lib --message-format short 2>&1 | tee check.log
 
+      - name: Install flutter
+        if: ${{ inputs.full }}
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: "3.24.5"
+
+      - name: Build the app with the extension
+        if: ${{ inputs.full }}
+        run: |
+          set -o pipefail
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+          cargo build --locked --features flutter,hwcodec --release --target aarch64-apple-ios --lib 2>&1 | tail -5
+          ruby .comtech/.github/patches/ios_broadcast/add_broadcast.rb
+          cd flutter && flutter build ipa --release --no-codesign 2>&1 | tee ../build.log
+          app=$(ls -d build/ios/archive/Runner.xcarchive/Products/Applications/*.app | head -1)
+          ls -la "$app/PlugIns" && du -sh "$app" "$app"/PlugIns/*
+
       - name: Errors
         if: failure()
         run: |
           grep -E "^(src|libs)/.*error" check.log | head -200 || true
+          [ -f build.log ] && grep -E "error|Undefined symbol|ld:" build.log | head -100 || true
