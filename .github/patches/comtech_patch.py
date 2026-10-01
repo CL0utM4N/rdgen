@@ -141,8 +141,13 @@ def ios_share(p):
           "iOS has the connection manager", 20)
     p.replace("src/flutter.rs", '// Server Side\n#[cfg(not(any(target_os = "ios")))]\npub mod connection_manager {',
               '// Server Side\npub mod connection_manager {', "iOS has the connection manager's channel")
-    p.replace("src/common.rs", '#[inline(always)]\n#[cfg(not(target_os = "ios"))]\npub fn whoami_hostname()',
-              '#[inline(always)]\npub fn whoami_hostname()', "iOS knows its device name")
+    p.append("src/common.rs", "comtech_ios_common.rs", "iOS knows its device name")
+    p.replace("src/flutter.rs",
+              '    #[cfg(target_os = "android")]\n    use hbb_common::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};\n\n'
+              '    #[cfg(target_os = "android")]\n    pub fn start_channel(',
+              '    #[cfg(any(target_os = "android", target_os = "ios"))]\n    use hbb_common::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};\n\n'
+              '    #[cfg(any(target_os = "android", target_os = "ios"))]\n    pub fn start_channel(',
+              "iOS starts the connection manager like Android")
     p.append("src/platform/mod.rs", "comtech_ios_platform.rs", "iOS platform basics for the server")
 
     scrap = "libs/scrap/src/common/"
