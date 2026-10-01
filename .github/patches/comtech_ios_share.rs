@@ -96,11 +96,10 @@ pub extern "C" fn comtech_share_frame_nv12(
         let (sy, rest) = small.split_at_mut(dw * dh);
         let (su, sv) = rest.split_at_mut(sw * sh);
         unsafe {
-            // 2: bilinear
             scrap::I420Scale(
                 iy.as_ptr(), w as _, iu.as_ptr(), cw as _, iv.as_ptr(), cw as _, w as _, h as _,
                 sy.as_mut_ptr(), dw as _, su.as_mut_ptr(), sw as _, sv.as_mut_ptr(), sw as _, dw as _, dh as _,
-                2 as _,
+                scrap::FilterMode::kFilterBilinear,
             );
         }
         py = sy.as_ptr();

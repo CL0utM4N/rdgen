@@ -121,13 +121,29 @@ def ios_share(p):
               '    #[cfg(not(target_os = "ios"))]\n    {\n        server.add_service(Box::new(display_service::new()));\n',
               '    server.add_service(Box::new(display_service::new()));\n    #[cfg(not(target_os = "ios"))]\n    {\n',
               "iOS shares its screen")
+    p.replace(server,
+              '    pub const NAME_WINDOW_FOCUS: &\'static str = "";\n}\n',
+              '    pub const NAME_WINDOW_FOCUS: &\'static str = "";\n'
+              '    #[cfg(target_os = "ios")]\n    pub fn fix_key_down_timeout_at_exit() {}\n}\n',
+              "iOS has no keys to release")
     p.replace("src/rendezvous_mediator.rs",
-              '        #[cfg(target_os = "android")]\n        let start_lan_listening = true;\n',
-              '        #[cfg(target_os = "android")]\n        let start_lan_listening = true;\n'
-              '        #[cfg(target_os = "ios")]\n        let start_lan_listening = false;\n',
+              '        if start_lan_listening {\n            std::thread::spawn(move || {\n'
+              '                allow_err!(super::lan::start_listening());',
+              '        #[cfg(not(target_os = "ios"))]\n'
+              '        if start_lan_listening {\n            std::thread::spawn(move || {\n'
+              '                allow_err!(super::lan::start_listening());',
               "iOS doesn't listen on the LAN")
     p.sub("src/hbbs_http/sync.rs", r'(?m)^#\[cfg\(not\(any\(target_os = "ios"\)\)\)\]\n|^#\[cfg\(not\(target_os = "ios"\)\)\]\n', '',
           "iOS reports to the API", 7)
+    # the connection manager runs in the extension like Android's, with no
+    # window: the build's permanent password lets technicians in
+    p.sub("src/ui_cm_interface.rs", r'#\[cfg\(not\(any\(target_os = "ios"\)\)\)\]\s*|#\[cfg\(not\(target_os = "ios"\)\)\]\s*', '',
+          "iOS has the connection manager", 20)
+    p.replace("src/flutter.rs", '// Server Side\n#[cfg(not(any(target_os = "ios")))]\npub mod connection_manager {',
+              '// Server Side\npub mod connection_manager {', "iOS has the connection manager's channel")
+    p.replace("src/common.rs", '#[inline(always)]\n#[cfg(not(target_os = "ios"))]\npub fn whoami_hostname()',
+              '#[inline(always)]\npub fn whoami_hostname()', "iOS knows its device name")
+    p.append("src/platform/mod.rs", "comtech_ios_platform.rs", "iOS platform basics for the server")
 
     scrap = "libs/scrap/src/common/"
     p.replace(scrap + "mod.rs",
@@ -140,6 +156,8 @@ def ios_share(p):
     p.sub(scrap + "codec.rs", r'(?m)^#\[cfg\(not\(target_os = "ios"\)\)\]\n(?=pub fn test_av1)', '', "iOS tests AV1 like others", 1)
     p.write(scrap + "ios.rs", open(os.path.join(HERE, "comtech_ios_capture.rs"), encoding="utf-8").read(),
             "the iOS capturer")
+    # the server passes taps and keys on to Android; an iPhone can't take them
+    p.append("libs/scrap/src/lib.rs", "comtech_ios_input.rs", "iOS ignores remote input")
 
 
 def main():
