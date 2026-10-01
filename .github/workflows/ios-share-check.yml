@@ -105,7 +105,7 @@ jobs:
           cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
           cargo build --locked --features flutter,hwcodec --release --target aarch64-apple-ios --lib 2>&1 | tail -5
           ruby .comtech/.github/patches/ios_broadcast/add_broadcast.rb
-          cd flutter && flutter build ipa --release --no-codesign -v 2>&1 > ../build.log || { grep -E "error:|Undefined symbol|ld: |** ARCHIVE" ../build.log | head -80; exit 1; }
+          cd flutter && flutter build ipa --release --no-codesign -v > ../build.log 2>&1 || { grep -E "error:|Undefined symbol|ld: |ARCHIVE FAILED" ../build.log | head -80; exit 1; }
           app=$(ls -d build/ios/archive/Runner.xcarchive/Products/Applications/*.app | head -1)
           ls -la "$app/PlugIns" && du -sh "$app" "$app"/PlugIns/*
 
