@@ -164,6 +164,13 @@ def ios_share(p):
               '#[cfg(target_os = "android")]\n#[tokio::main(flavor = "current_thread")]\npub async fn start_listen<',
               '#[cfg(any(target_os = "android", target_os = "ios"))]\n#[tokio::main(flavor = "current_thread")]\npub async fn start_listen<',
               "iOS listens for connections like Android")
+    # the extension's log goes to the API; say why a login was refused
+    p.replace("src/server/connection.rs",
+              "    async fn send_login_error<T: std::string::ToString>(&mut self, err: T) {\n",
+              "    async fn send_login_error<T: std::string::ToString>(&mut self, err: T) {\n"
+              "        #[cfg(target_os = \"ios\")]\n"
+              "        log::info!(\"comtech: login refused: {}\", err.to_string());\n",
+              "iOS logs refused logins")
     p.append("src/platform/mod.rs", "comtech_ios_platform.rs", "iOS platform basics for the server")
 
     scrap = "libs/scrap/src/common/"

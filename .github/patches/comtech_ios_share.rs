@@ -63,6 +63,16 @@ pub extern "C" fn comtech_share_start(app_dir: *const c_char, custom: *const c_c
             config::Config::get_option("api-server"),
             app_dir
         );
+        // how connections will be let in (never the password itself)
+        log::info!(
+            "comtech: settings {} bytes; preset password {}, using it {}, local password {}; verification {:?}, approve {:?}",
+            custom.trim().len(),
+            !config::Config::get_preset_password_storage_and_salt().0.is_empty(),
+            config::Config::is_using_preset_password(),
+            config::Config::has_local_permanent_password(),
+            config::Config::get_option("verification-method"),
+            config::Config::get_option("approve-mode"),
+        );
         std::thread::spawn(|| crate::start_server(true));
     });
 }
