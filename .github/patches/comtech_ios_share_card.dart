@@ -40,7 +40,17 @@ const _broadcast = MethodChannel('comtech/broadcast');
 
 class _ComtechShareCardState extends State<ComtechShareCard> {
   String? id;
+  String? code;
   String? problem;
+
+  // the one-time code stays until the user asks for a new one; the
+  // extension picks up a new code within a couple of seconds
+  Future<void> _code({bool renew = false}) async {
+    try {
+      final c = await _broadcast.invokeMethod<String>(renew ? 'newCode' : 'code');
+      if (mounted) setState(() => code = c);
+    } catch (_) {}
+  }
 
   Future<void> _start() async {
     try {
@@ -57,6 +67,7 @@ class _ComtechShareCardState extends State<ComtechShareCard> {
   @override
   void initState() {
     super.initState();
+    _code();
     DeviceInfoPlugin().iosInfo.then((info) {
       if (mounted) setState(() => id = comtechShareId(info.identifierForVendor));
     }).catchError((_) {});
@@ -84,9 +95,21 @@ class _ComtechShareCardState extends State<ComtechShareCard> {
               onPressed: () => Clipboard.setData(ClipboardData(text: id!)),
             ),
           ]),
+          if (code != null)
+            Row(children: [
+              Text('One-time code  ', style: theme.textTheme.bodyMedium),
+              SelectableText(_spaced(code!),
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, letterSpacing: 1)),
+              IconButton(
+                tooltip: 'New code',
+                icon: const Icon(Icons.refresh, size: 20),
+                onPressed: () => _code(renew: true),
+              ),
+            ]),
           const SizedBox(height: 4),
           Text(
-            'Give your technician the number above, then tap Start sharing and Start Broadcast. '
+            'Give your technician the numbers above, then tap Start sharing and Start Broadcast. '
+            'Tap the arrows for a new code when you want the old one to stop working. '
             'You can also start it from Control Center: press and hold Screen Recording and choose this app.',
             style: theme.textTheme.bodySmall,
           ),

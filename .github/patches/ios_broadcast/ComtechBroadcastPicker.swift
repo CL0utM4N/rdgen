@@ -17,6 +17,13 @@ enum ComtechBroadcastPicker {
                 result(start(in: controller.view))
             case "installed":
                 result(extensionId() != nil)
+            case "code":
+                // the current one-time code, made the first time
+                result(ComtechShareCode.read() ?? ComtechShareCode.renew())
+            case "newCode":
+                // a fresh one-time code for the technician; nil when the
+                // keychain can't share it with the extension
+                result(ComtechShareCode.renew())
             default:
                 result(FlutterMethodNotImplemented)
             }

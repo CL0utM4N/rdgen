@@ -8,7 +8,11 @@ import ReplayKit
 import UIKit
 
 @_silgen_name("comtech_share_start")
-func comtech_share_start(_ appDir: UnsafePointer<CChar>, _ custom: UnsafePointer<CChar>, _ vendorId: UnsafePointer<CChar>)
+func comtech_share_start(_ appDir: UnsafePointer<CChar>, _ custom: UnsafePointer<CChar>,
+                         _ vendorId: UnsafePointer<CChar>, _ code: UnsafePointer<CChar>)
+
+@_silgen_name("comtech_share_set_code")
+func comtech_share_set_code(_ code: UnsafePointer<CChar>)
 
 @_silgen_name("comtech_share_stop")
 func comtech_share_stop()
@@ -20,6 +24,8 @@ func comtech_share_frame_nv12(_ y: UnsafePointer<UInt8>, _ yStride: Int32,
 
 class SampleHandler: RPBroadcastSampleHandler {
     private var lastFrame: CFAbsoluteTime = 0
+    private var code = ""
+    private var lastCodeCheck: CFAbsoluteTime = 0
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         // the extension's own folder; it can't write to the app's
@@ -33,7 +39,9 @@ class SampleHandler: RPBroadcastSampleHandler {
         let custom = (try? String(contentsOf: customUrl, encoding: .utf8)) ?? ""
         // the app shows an ID made from this, so the user can read it out
         let vendorId = UIDevice.current.identifierForVendor?.uuidString ?? ""
-        comtech_share_start(dir.path, custom, vendorId)
+        // the one-time code the app is showing
+        code = ComtechShareCode.read() ?? ""
+        comtech_share_start(dir.path, custom, vendorId, code)
     }
 
     override func broadcastFinished() {
@@ -42,6 +50,15 @@ class SampleHandler: RPBroadcastSampleHandler {
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        // the user can get a new code in the app while sharing
+        let t = CFAbsoluteTimeGetCurrent()
+        if t - lastCodeCheck > 2 {
+            lastCodeCheck = t
+            if let c = ComtechShareCode.read(), c != code {
+                code = c
+                comtech_share_set_code(c)
+            }
+        }
         // about 15 frames a second is plenty to follow along, and keeps the
         // extension inside its memory and CPU limits
         let now = CFAbsoluteTimeGetCurrent()

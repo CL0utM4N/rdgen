@@ -37,12 +37,19 @@ pub fn share_id(vendor_id: &str) -> Option<String> {
 
 /// Starts sharing. app_dir is a folder the extension can write to; custom is
 /// the signed settings from the app's assets/custom.txt; vendor_id is the
-/// phone's identifierForVendor.
+/// phone's identifierForVendor; code is the one-time code the app shows
+/// (empty when the app couldn't share one).
 #[no_mangle]
-pub extern "C" fn comtech_share_start(app_dir: *const c_char, custom: *const c_char, vendor_id: *const c_char) {
+pub extern "C" fn comtech_share_start(
+    app_dir: *const c_char,
+    custom: *const c_char,
+    vendor_id: *const c_char,
+    code: *const c_char,
+) {
     let app_dir = cstr(app_dir);
     let custom = cstr(custom);
     let vendor_id = cstr(vendor_id);
+    let code = cstr(code);
     START.call_once(move || {
         remote_log::start();
         *config::APP_DIR.write().unwrap() = app_dir.clone();
@@ -50,6 +57,18 @@ pub extern "C" fn comtech_share_start(app_dir: *const c_char, custom: *const c_c
             crate::read_custom_client(custom.trim());
         } else {
             log::warn!("comtech: no settings found in the app; sharing uses the built-in server");
+        }
+        // the code the app shows is this session's one-time password, beside
+        // the build's permanent password if it has one
+        let has_code = code.len() >= 6;
+        if has_code {
+            *hbb_common::password_security::TEMPORARY_PASSWORD.write().unwrap() = code.clone();
+            config::OVERWRITE_SETTINGS
+                .write()
+                .unwrap()
+                .insert("verification-method".to_owned(), "use-both-passwords".to_owned());
+        } else {
+            log::warn!("comtech: no one-time code from the app; only the permanent password works");
         }
         if let Some(id) = share_id(&vendor_id) {
             if config::Config::get_id() != id {
@@ -65,8 +84,9 @@ pub extern "C" fn comtech_share_start(app_dir: *const c_char, custom: *const c_c
         );
         // how connections will be let in (never the password itself)
         log::info!(
-            "comtech: settings {} bytes; preset password {}, using it {}, local password {}; verification {:?}, approve {:?}",
+            "comtech: settings {} bytes; one-time code {}; preset password {}, using it {}, local password {}; verification {:?}, approve {:?}",
             custom.trim().len(),
+            has_code,
             !config::Config::get_preset_password_storage_and_salt().0.is_empty(),
             config::Config::is_using_preset_password(),
             config::Config::has_local_permanent_password(),
@@ -75,6 +95,20 @@ pub extern "C" fn comtech_share_start(app_dir: *const c_char, custom: *const c_c
         );
         std::thread::spawn(|| crate::start_server(true));
     });
+}
+
+/// The app made a new one-time code during the broadcast
+#[no_mangle]
+pub extern "C" fn comtech_share_set_code(code: *const c_char) {
+    let code = cstr(code);
+    if code.len() >= 6 {
+        *hbb_common::password_security::TEMPORARY_PASSWORD.write().unwrap() = code;
+        config::OVERWRITE_SETTINGS
+            .write()
+            .unwrap()
+            .insert("verification-method".to_owned(), "use-both-passwords".to_owned());
+        log::info!("comtech: new one-time code from the app");
+    }
 }
 
 /// The broadcast stopped; send what's left of the log

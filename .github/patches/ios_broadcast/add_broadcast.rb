@@ -11,6 +11,7 @@ dir = File.join(ios, 'ComtechBroadcast')
 FileUtils.mkdir_p(dir)
 FileUtils.cp(File.join(here, 'SampleHandler.swift'), dir)
 FileUtils.cp(File.join(here, 'Info.plist'), dir)
+FileUtils.cp(File.join(here, 'ComtechShareCode.swift'), dir)
 
 # the app's version, which an extension has to match
 version = File.read(File.join('flutter', 'pubspec.yaml'))[/^version:\s*(\S+)/, 1] || '1.0.0+1'
@@ -22,7 +23,7 @@ abort('already added') if proj.targets.any? { |t| t.name == 'ComtechBroadcast' }
 
 ext = proj.new_target(:app_extension, 'ComtechBroadcast', :ios, '13.0')
 group = proj.main_group.new_group('ComtechBroadcast', 'ComtechBroadcast')
-ext.add_file_references([group.new_file('SampleHandler.swift')])
+ext.add_file_references([group.new_file('SampleHandler.swift'), group.new_file('ComtechShareCode.swift')])
 group.new_file('Info.plist')
 ext.add_system_frameworks(%w[ReplayKit CoreMedia CoreVideo VideoToolbox AVFoundation AudioToolbox
                              CoreFoundation Foundation Security SystemConfiguration Metal QuartzCore UIKit])
@@ -62,8 +63,9 @@ app.build_phases.insert(at + 1, embed)
 # the app can open the broadcast picker itself (Start sharing)
 runner_dir = File.join(ios, 'Runner')
 FileUtils.cp(File.join(here, 'ComtechBroadcastPicker.swift'), runner_dir)
+FileUtils.cp(File.join(here, 'ComtechShareCode.swift'), runner_dir)
 runner_group = proj.main_group.find_subpath('Runner', false) or abort('no Runner group')
-app.add_file_references([runner_group.new_file('ComtechBroadcastPicker.swift')])
+app.add_file_references([runner_group.new_file('ComtechBroadcastPicker.swift'), runner_group.new_file('ComtechShareCode.swift')])
 app.add_system_framework('ReplayKit')
 delegate = File.join(runner_dir, 'AppDelegate.swift')
 code = File.read(delegate)
