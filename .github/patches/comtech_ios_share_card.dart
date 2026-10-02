@@ -4,10 +4,18 @@
 //
 // The broadcast extension does the sharing and has no screen of its own; it
 // takes its ID from identifierForVendor (see comtech_ios.rs share_id), which
-// it shares with this app, so the same number is worked out here.
+// it shares with this app, so the same number is worked out here. While it
+// shares, it makes a one-time code and gives it to the API under the same
+// identifierForVendor; this card fetches it from there to show.
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:http/http.dart' as http;
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 String? comtechShareId(String? vendorId) {
   final v = (vendorId ?? '').trim().toUpperCase();
@@ -40,15 +48,24 @@ const _broadcast = MethodChannel('comtech/broadcast');
 
 class _ComtechShareCardState extends State<ComtechShareCard> {
   String? id;
+  String? vendor;
   String? code;
   String? problem;
+  Timer? timer;
 
-  // the one-time code stays until the user asks for a new one; the
-  // extension picks up a new code within a couple of seconds
-  Future<void> _code({bool renew = false}) async {
+  // the extension's one-time code, which exists only while sharing is on
+  Future<void> _fetchCode() async {
+    final v = vendor;
+    if (v == null) return;
     try {
-      final c = await _broadcast.invokeMethod<String>(renew ? 'newCode' : 'code');
-      if (mounted) setState(() => code = c);
+      final api = (await bind.mainGetApiServer()).replaceAll(RegExp(r'/+$'), '');
+      if (api.isEmpty) return;
+      final r = await http
+          .get(Uri.parse('$api/api/comtech/ios-code?vendor=${Uri.encodeQueryComponent(v)}'))
+          .timeout(const Duration(seconds: 8));
+      if (r.statusCode != 200) return;
+      final c = (jsonDecode(r.body)['code'] ?? '').toString();
+      if (mounted && c != (code ?? '')) setState(() => code = c.isEmpty ? null : c);
     } catch (_) {}
   }
 
@@ -67,10 +84,25 @@ class _ComtechShareCardState extends State<ComtechShareCard> {
   @override
   void initState() {
     super.initState();
-    _code();
+    // the phone stays awake while the app is open; iOS doesn't let it keep
+    // others awake, so the card asks the user to change Auto-Lock
+    WakelockPlus.enable().catchError((_) {});
     DeviceInfoPlugin().iosInfo.then((info) {
-      if (mounted) setState(() => id = comtechShareId(info.identifierForVendor));
+      if (!mounted) return;
+      setState(() {
+        vendor = info.identifierForVendor;
+        id = comtechShareId(vendor);
+      });
+      _fetchCode();
+      timer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchCode());
     }).catchError((_) {});
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    WakelockPlus.disable().catchError((_) {});
+    super.dispose();
   }
 
   @override
@@ -100,17 +132,16 @@ class _ComtechShareCardState extends State<ComtechShareCard> {
               Text('One-time code  ', style: theme.textTheme.bodyMedium),
               SelectableText(_spaced(code!),
                   style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, letterSpacing: 1)),
-              IconButton(
-                tooltip: 'New code',
-                icon: const Icon(Icons.refresh, size: 20),
-                onPressed: () => _code(renew: true),
-              ),
-            ]),
+            ])
+          else
+            Text('A one-time code appears here once you start sharing.', style: theme.textTheme.bodySmall),
           const SizedBox(height: 4),
           Text(
-            'Give your technician the numbers above, then tap Start sharing and Start Broadcast. '
-            'Tap the arrows for a new code when you want the old one to stop working. '
-            'You can also start it from Control Center: press and hold Screen Recording and choose this app.',
+            'Tap Start sharing, then Start Broadcast, and give your technician the ID and one-time code. '
+            'Each time you start sharing there is a new code. '
+            'You can also start it from Control Center: press and hold Screen Recording and choose this app.\n\n'
+            "So your iPhone doesn't lock while you're being helped, set Auto-Lock to Never "
+            '(Settings → Display & Brightness → Auto-Lock), and change it back afterwards.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 10),

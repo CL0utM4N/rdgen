@@ -37,8 +37,9 @@ pub fn share_id(vendor_id: &str) -> Option<String> {
 
 /// Starts sharing. app_dir is a folder the extension can write to; custom is
 /// the signed settings from the app's assets/custom.txt; vendor_id is the
-/// phone's identifierForVendor; code is the one-time code the app shows
-/// (empty when the app couldn't share one).
+/// phone's identifierForVendor; code is a one-time code to use, or empty to
+/// make one. The code goes to the API under the vendor ID, where the app
+/// (which shares that ID but can't read the extension's files) fetches it.
 #[no_mangle]
 pub extern "C" fn comtech_share_start(
     app_dir: *const c_char,
@@ -63,18 +64,11 @@ pub extern "C" fn comtech_share_start(
         } else {
             log::warn!("comtech: no settings found in the app; sharing uses the built-in server");
         }
-        // the code the app shows is this session's one-time password, beside
-        // the build's permanent password if it has one
-        let has_code = code.len() >= 6;
-        if has_code {
-            *hbb_common::password_security::TEMPORARY_PASSWORD.write().unwrap() = code.clone();
-            config::OVERWRITE_SETTINGS
-                .write()
-                .unwrap()
-                .insert("verification-method".to_owned(), "use-both-passwords".to_owned());
-        } else {
-            log::warn!("comtech: no one-time code from the app; only the permanent password works");
-        }
+        // this session's one-time password, beside the build's permanent
+        // password if it has one; the app shows it
+        let code = if code.len() >= 6 { code } else { new_code() };
+        *VENDOR.lock().unwrap() = vendor_id.clone();
+        use_code(&code);
         if let Some(id) = share_id(&vendor_id) {
             if config::Config::get_id() != id {
                 config::Config::set_id(&id);
@@ -89,9 +83,8 @@ pub extern "C" fn comtech_share_start(
         );
         // how connections will be let in (never the password itself)
         log::info!(
-            "comtech: settings {} bytes; one-time code {}; preset password {}, using it {}, local password {}; verification {:?}, approve {:?}",
+            "comtech: settings {} bytes; one-time code on; preset password {}, using it {}, local password {}; verification {:?}, approve {:?}",
             custom.trim().len(),
-            has_code,
             !config::Config::get_preset_password_storage_and_salt().0.is_empty(),
             config::Config::is_using_preset_password(),
             config::Config::has_local_permanent_password(),
@@ -102,24 +95,61 @@ pub extern "C" fn comtech_share_start(
     });
 }
 
-/// The app made a new one-time code during the broadcast
+lazy_static::lazy_static! {
+    static ref VENDOR: Mutex<String> = Mutex::new(String::new());
+}
+
+fn new_code() -> String {
+    use hbb_common::rand::Rng;
+    format!("{:06}", hbb_common::rand::thread_rng().gen_range(0..1_000_000))
+}
+
+/// Lets the code in as a one-time password and tells the API, so the app
+/// can show it
+fn use_code(code: &str) {
+    *hbb_common::password_security::TEMPORARY_PASSWORD.write().unwrap() = code.to_owned();
+    config::OVERWRITE_SETTINGS
+        .write()
+        .unwrap()
+        .insert("verification-method".to_owned(), "use-both-passwords".to_owned());
+    publish_code(code);
+}
+
+fn publish_code(code: &str) {
+    let vendor = VENDOR.lock().unwrap().clone();
+    if vendor.is_empty() {
+        return;
+    }
+    let body = serde_json::json!({ "vendor": vendor, "code": code }).to_string();
+    let clearing = code.is_empty();
+    let send = move || {
+        if !remote_log::post("/api/comtech/ios-code", body) {
+            log::warn!("comtech: the one-time code couldn't be sent to the API");
+        }
+    };
+    if clearing {
+        send(); // the extension is about to end
+    } else {
+        std::thread::spawn(send);
+    }
+}
+
+/// A new one-time code during the broadcast
 #[no_mangle]
 pub extern "C" fn comtech_share_set_code(code: *const c_char) {
     let code = cstr(code);
     if code.len() >= 6 {
-        *hbb_common::password_security::TEMPORARY_PASSWORD.write().unwrap() = code;
-        config::OVERWRITE_SETTINGS
-            .write()
-            .unwrap()
-            .insert("verification-method".to_owned(), "use-both-passwords".to_owned());
-        log::info!("comtech: new one-time code from the app");
+        use_code(&code);
+        log::info!("comtech: new one-time code");
     }
 }
 
-/// The broadcast stopped; send what's left of the log
+/// The broadcast stopped: the code stops working, and what's left of the
+/// log is sent
 #[no_mangle]
 pub extern "C" fn comtech_share_stop() {
     log::info!("comtech: iOS sharing stopped");
+    publish_code("");
     remote_log::flush();
 }
 
@@ -168,22 +198,28 @@ mod remote_log {
         if lines.is_empty() {
             return;
         }
-        let api = crate::common::get_api_server(
-            config::Config::get_option("api-server"),
-            config::Config::get_option("custom-rendezvous-server"),
-        );
-        if api.is_empty() {
-            return;
-        }
         let body = serde_json::json!({
             "id": config::Config::get_id(),
             "uuid": crate::encode64(hbb_common::get_uuid()),
             "lines": lines,
         })
         .to_string();
-        let url = format!("{}/api/comtech/ios-log", api.trim_end_matches('/'));
-        if let Ok(rt) = hbb_common::tokio::runtime::Builder::new_current_thread().enable_all().build() {
-            let _ = rt.block_on(crate::post_request(url, body, "Content-Type: application/json"));
+        post("/api/comtech/ios-log", body);
+    }
+
+    /// Posts JSON to the API server; false when it couldn't
+    pub fn post(path: &str, body: String) -> bool {
+        let api = crate::common::get_api_server(
+            config::Config::get_option("api-server"),
+            config::Config::get_option("custom-rendezvous-server"),
+        );
+        if api.is_empty() {
+            return false;
+        }
+        let url = format!("{}{}", api.trim_end_matches('/'), path);
+        match hbb_common::tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt.block_on(crate::post_request(url, body, "Content-Type: application/json")).is_ok(),
+            Err(_) => false,
         }
     }
 }
