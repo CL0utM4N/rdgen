@@ -196,6 +196,16 @@ jobs:
           name: bridge-artifact
           path: ./
 
+      # Comtech: as RustDesk's own 1.5.0 workflow does; vcpkg 2026.07+'s SPDX
+      # scripts need CMake 4.3+, and the ARM64 runner has 3.31
+      - name: Install CMake for vcpkg on Linux ARM64
+        if: matrix.job.arch == 'aarch64' && !startsWith(inputs.version, '1.4.')
+        run: |
+          python3 -m pip install --user "cmake==4.3.0"
+          user_base="$(python3 -m site --user-base)"
+          "${user_base}/bin/cmake" --version
+          echo "${user_base}/bin" >> "${GITHUB_PATH}"
+
       - name: Setup vcpkg with Github Actions binary cache
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         uses: lukka/run-vcpkg@v11

@@ -680,7 +680,7 @@ const Map<String, List<String>> kEnglish = {
   'Started': ['Started'],
   'Length': ['Length'],
   'Ended': ['Ended'],
-  'InstantBuilds': ['Instant Windows builds'],
+  'InstantBuilds': ['Instant builds'],
   'InstantBuildsHelp': ['Installers are made on this server in seconds from a base client, with each customer\'s name, icon, logo, device group and settings. A base client is built on GitHub once per RustDesk release and platform, which takes about an hour.'],
   'BuildBase': ['Build base client'],
   'BuildBaseVersion': ['Build base client for {v}'],
