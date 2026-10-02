@@ -231,13 +231,23 @@ def main():
     if a.packer:
         old = ('#[cfg(windows)]\nconst BIN_DATA: &[u8] = include_bytes!("../data.bin");\n'
                '#[cfg(not(windows))]\nconst BIN_DATA: &[u8] = &[];\n')
+        # 1.5.0 keeps the compiled in data for Windows only, beside its own
+        # per-customer resource (RDPKG), which instant builds don't use
+        old150 = '#[cfg(windows)]\nconst BIN_DATA: &[u8] = include_bytes!("../data.bin");\n'
         path = "libs/portable/src/bin_reader.rs"
         s = open(path, encoding="utf-8").read()
-        if old not in s:
+        if old in s:
+            found = old
+        elif old150 in s and s.count("BIN_DATA") == 2:
+            found = old150
+        else:
             fail(f"installer packing: RustDesk changed {path}, so this change needs updating for this version")
         if not a.check:
             new = open(os.path.join(HERE, "comtech_bin_data.rs"), encoding="utf-8").read()
-            s = s.replace(old, new, 1).replace("BIN_DATA", "bin_data()")
+            if found == old150:
+                new = new.replace("\nstatic PAYLOAD", "\n#[cfg(windows)]\nstatic PAYLOAD", 1)
+                new = new.replace("\nfn bin_data()", "\n#[cfg(windows)]\nfn bin_data()", 1)
+            s = s.replace(found, new, 1).replace("BIN_DATA", "bin_data()")
             open(path, "w", encoding="utf-8", newline="\n").write(s)
         print("ok: the installer reads its files from the end of the exe")
 
