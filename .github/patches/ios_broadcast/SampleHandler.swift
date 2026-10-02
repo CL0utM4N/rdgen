@@ -9,7 +9,8 @@ import UIKit
 
 @_silgen_name("comtech_share_start")
 func comtech_share_start(_ appDir: UnsafePointer<CChar>, _ custom: UnsafePointer<CChar>,
-                         _ vendorId: UnsafePointer<CChar>, _ code: UnsafePointer<CChar>)
+                         _ vendorId: UnsafePointer<CChar>, _ code: UnsafePointer<CChar>,
+                         _ deviceName: UnsafePointer<CChar>)
 
 @_silgen_name("comtech_share_set_code")
 func comtech_share_set_code(_ code: UnsafePointer<CChar>)
@@ -41,7 +42,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         let vendorId = UIDevice.current.identifierForVendor?.uuidString ?? ""
         // the one-time code the app is showing
         code = ComtechShareCode.read() ?? ""
-        comtech_share_start(dir.path, custom, vendorId, code)
+        comtech_share_start(dir.path, custom, vendorId, code, UIDevice.current.name)
     }
 
     override func broadcastFinished() {

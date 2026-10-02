@@ -45,13 +45,18 @@ pub extern "C" fn comtech_share_start(
     custom: *const c_char,
     vendor_id: *const c_char,
     code: *const c_char,
+    device_name: *const c_char,
 ) {
+    let device_name = cstr(device_name);
     let app_dir = cstr(app_dir);
     let custom = cstr(custom);
     let vendor_id = cstr(vendor_id);
     let code = cstr(code);
     START.call_once(move || {
         remote_log::start();
+        // the name the device list shows; the app normally sets it, and the
+        // extension doesn't run the app
+        *crate::common::DEVICE_NAME.lock().unwrap() = device_name;
         *config::APP_DIR.write().unwrap() = app_dir.clone();
         if !custom.trim().is_empty() {
             crate::read_custom_client(custom.trim());

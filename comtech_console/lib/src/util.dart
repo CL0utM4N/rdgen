@@ -39,6 +39,7 @@ Future<void> openUrl(String url) async {
 
 IconData platformIcon(String? name) {
   final n = (name ?? '').toLowerCase();
+  if (n.startsWith('ios') || n.contains('/ ios') || n.contains('ipados') || n.contains('iphone')) return Icons.phone_iphone;
   if (n.contains('win')) return Icons.window;
   if (n.contains('mac')) return Icons.apple;
   if (n.contains('android')) return Icons.android;

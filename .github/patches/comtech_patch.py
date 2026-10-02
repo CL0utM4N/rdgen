@@ -210,6 +210,13 @@ def main():
 
     quote_app_name(p)
 
+    # iPhones and iPads in device lists get a phone icon, not Windows'
+    p.replace("flutter/lib/common.dart",
+              "  if (platform == kPeerPlatformMacOS) {\n    platform = 'mac';\n",
+              "  if (platform == 'iOS') {\n    platform = 'ios';\n  } else if (platform == kPeerPlatformMacOS) {\n    platform = 'mac';\n",
+              "iOS devices have their own icon")
+    p.write("flutter/assets/ios.svg", open(os.path.join(HERE, "comtech_ios.svg"), encoding="utf-8").read(), "the iOS icon")
+
     if a.updates:
         p.replace("src/common.rs",
                   "    let (request, url) =\n        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());\n",

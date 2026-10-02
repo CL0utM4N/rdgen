@@ -11,11 +11,12 @@ import '../widgets/listpage.dart';
 import '../widgets/select.dart';
 import '../widgets/table.dart';
 
-const abPlatforms = [Opt('Windows', 'Windows'), Opt('Linux', 'Linux'), Opt('Mac OS', 'Mac OS'), Opt('Android', 'Android')];
+const abPlatforms = [Opt('Windows', 'Windows'), Opt('Linux', 'Linux'), Opt('Mac OS', 'Mac OS'), Opt('Android', 'Android'), Opt('iOS', 'iOS')];
 
 /// The address book platform for a device's OS string.
 String abPlatformFor(String os) {
   final o = os.toLowerCase();
+  if (o.startsWith('ios') || o.contains('/ ios') || o.contains('ipados') || o.contains('iphone')) return 'iOS';
   if (o.contains('windows')) return 'Windows';
   if (o.contains('linux')) return 'Linux';
   if (o.contains('android')) return 'Android';
