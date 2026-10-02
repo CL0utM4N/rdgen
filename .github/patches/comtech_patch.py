@@ -54,6 +54,9 @@ class Patcher:
             fail(f"{what}: {path} is missing")
         if not self.check:
             extra = open(os.path.join(HERE, extra_file), encoding="utf-8").read()
+            # 1.5.0 moved the protocol messages from hbb_common to a base crate
+            cargo = open("Cargo.toml", encoding="utf-8").read() if os.path.isfile("Cargo.toml") else ""
+            extra = extra.replace("__PROTO__", "base" if 'base = { path = "libs/base" }' in cargo else "hbb_common")
             with open(path, "a", encoding="utf-8", newline="\n") as f:
                 f.write("\n" + extra)
         print("ok: " + what)
