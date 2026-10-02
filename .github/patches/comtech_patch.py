@@ -227,6 +227,17 @@ def main():
                   "    let url = comtech_update_check_url();\n",
                   "updates are checked with our server")
         p.append("src/common.rs", "comtech_update_check.rs", "the update check address")
+        # "Update now" in the console: the API flags it in the heartbeat reply
+        # and the updater checks at once (when nobody is connected)
+        hook = '                        if let Some(conns)  = rsp.remove("disconnect") {\n'
+        p.replace("src/hbbs_http/sync.rs", hook,
+                  '                        if rsp.remove("comtech_update").and_then(|v| v.as_bool()).unwrap_or(false) {\n'
+                  '                            #[cfg(windows)]\n'
+                  '                            if let Err(e) = crate::updater::manually_check_update() {\n'
+                  '                                log::error!("comtech: update check not started: {}", e);\n'
+                  '                            }\n'
+                  '                        }\n' + hook,
+                  "the console can ask for an update check")
         # updates install by themselves; don't offer RustDesk's download page
         p.replace("flutter/lib/desktop/pages/desktop_home_page.dart", "updateUrl.isNotEmpty", "false",
                   "no update banner", count=0)

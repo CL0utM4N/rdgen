@@ -405,6 +405,18 @@ class _PeerPageState extends State<PeerPage> {
     } catch (_) {}
   }
 
+  // "Update now": the selected devices, or every Windows device
+  Future<void> _requestUpdate() async {
+    final rows = ctl.selectedRows;
+    final msg = rows.isNotEmpty ? T('UpdateNowSelected', {'n': rows.length}) : T('UpdateNowAll');
+    if (!await confirm(context, msg, confirmText: T('UpdateNow'), title: T('UpdateNow'), warning: false)) return;
+    try {
+      final d = await api.post('/peer/requestUpdate',
+          body: rows.isNotEmpty ? {'row_ids': rows.map((r) => r['row_id']).toList()} : {'all': true});
+      Toasts.success(T('UpdateNowSent', {'n': (d is Map ? d['queued'] : null) ?? 0}));
+    } catch (_) {}
+  }
+
   Future<void> _export() async {
     try {
       final d = await api.get('/peer/list', params: {...ctl.query, 'page': 1, 'page_size': 10000});
@@ -527,6 +539,7 @@ class _PeerPageState extends State<PeerPage> {
           CtButton(T('Export'), tone: Tone.success, onPressed: _export),
           if (canManage) CtButton(T('Import'), tone: Tone.danger, icon: Icons.keyboard_arrow_down, onPressed: _import),
           if (canManage) CtButton(T('BatchDelete'), tone: Tone.danger, onPressed: _batchDelete),
+          if (canManage) CtButton(T('UpdateNow'), tone: Tone.primary, onPressed: _requestUpdate),
           if (canAb) CtButton(T('BatchAddToAB'), tone: Tone.primary, onPressed: () => batchAddToAb(context, mine: false, peers: ctl.selectedRows, users: users)),
         ]),
       ],
