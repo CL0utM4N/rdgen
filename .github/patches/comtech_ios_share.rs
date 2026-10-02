@@ -249,9 +249,15 @@ lazy_static::lazy_static! {
     static ref BUFFERS: Mutex<Buffers> = Mutex::new(Buffers { i420: Vec::new(), small: Vec::new(), bgra: Vec::new() });
 }
 
+/// A line for the log the extension sends to the API
+#[no_mangle]
+pub extern "C" fn comtech_share_note(message: *const c_char) {
+    log::info!("comtech: {}", cstr(message));
+}
+
 /// A screen frame as iOS gives it: NV12 (a Y plane and an interleaved UV
-/// plane). Phone screens are halved, keeping the shared picture readable
-/// while staying inside the extension's memory.
+/// plane). It's made smaller to fit max_side, which the extension picks from
+/// the memory iOS leaves it, so it stays inside the extension's limit.
 #[no_mangle]
 pub extern "C" fn comtech_share_frame_nv12(
     y: *const u8,
@@ -260,12 +266,20 @@ pub extern "C" fn comtech_share_frame_nv12(
     uv_stride: i32,
     width: i32,
     height: i32,
+    max_side: i32,
 ) {
     if y.is_null() || uv.is_null() || width < 2 || height < 2 {
         return;
     }
     let (w, h) = (width as usize & !1, height as usize & !1);
-    let (dw, dh) = if w.max(h) > 1600 { ((w / 2) & !1, (h / 2) & !1) } else { (w, h) };
+    // fit the long side into max_side, keeping even sizes for the encoder
+    let max_side = (max_side.max(320) as usize) & !1;
+    let (dw, dh) = if w.max(h) > max_side {
+        let k = max_side as f64 / w.max(h) as f64;
+        (((w as f64 * k) as usize) & !1, ((h as f64 * k) as usize) & !1)
+    } else {
+        (w, h)
+    };
     let mut b = BUFFERS.lock().unwrap();
     let Buffers { i420, small, bgra } = &mut *b;
     let (cw, ch) = (w / 2, h / 2);
