@@ -280,6 +280,32 @@ class _PeerPageState extends State<PeerPage> {
     super.dispose();
   }
 
+  /// The device's group; clicking it moves the device to another group
+  Widget _groupCell(Row_ r) {
+    final current = asInt(r['group_id']);
+    final label = current > 0 ? CtTag(nameOf(groups, r['group_id']), icon: canManage ? Icons.expand_more : null) : const Text('-');
+    if (!canManage || groups.isEmpty) return label;
+    return PopupMenuButton<int>(
+      tooltip: T('ChangeGroup'),
+      initialValue: current > 0 ? current : null,
+      onSelected: (g) => _moveToGroup(r, g),
+      itemBuilder: (_) => [
+        for (final g in groups) PopupMenuItem(value: asInt(g['id']), child: Text('${g['name']}')),
+      ],
+      child: current > 0 ? label : CtTag(T('ChooseGroup'), plain: true, icon: Icons.expand_more),
+    );
+  }
+
+  Future<void> _moveToGroup(Row_ r, int groupId) async {
+    if (groupId == asInt(r['group_id'])) return;
+    try {
+      // fields left out keep their values
+      await api.post('/peer/update', body: {'row_id': r['row_id'], 'group_id': groupId});
+      Toasts.success(T('MovedToGroup', {'name': nameOf(groups, groupId)}));
+      ctl.load();
+    } catch (_) {}
+  }
+
   Col _col(String name) {
     switch (name) {
       case 'id':
@@ -299,8 +325,7 @@ class _PeerPageState extends State<PeerPage> {
       case 'username':
         return Col(T('Username'), prop: 'username', width: 120);
       case 'group_id':
-        return Col(T('Group'),
-            minWidth: 150, cell: (r, _) => asInt(r['group_id']) > 0 ? CtTag(nameOf(groups, r['group_id'])) : const Text('-'));
+        return Col(T('Group'), width: 190, cell: (r, _) => _groupCell(r));
       case 'uuid':
         return Col(T('Uuid'), prop: 'uuid', width: 120, ellipsis: true);
       case 'version':

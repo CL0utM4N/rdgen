@@ -758,4 +758,7 @@ const Map<String, List<String>> kEnglish = {
   'UpdateNowSelected': ['Ask the {n} selected devices to update now? Installed Windows clients download the newest version from this server and reinstall as soon as nobody is connected to them. Devices that are offline update when they\'re next online.'],
   'UpdateNowAll': ['No devices are selected. Ask every Windows device to update now? Installed Windows clients download the newest version from this server and reinstall as soon as nobody is connected to them. Devices that are offline update when they\'re next online.'],
   'UpdateNowSent': ['Asked {n} devices to update. Clients built before Update now was added keep their daily check until their first update.'],
+  'ChangeGroup': ['Change group'],
+  'ChooseGroup': ['Choose group'],
+  'MovedToGroup': ['Moved to {name}'],
 };
