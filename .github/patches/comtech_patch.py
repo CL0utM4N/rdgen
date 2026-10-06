@@ -4,8 +4,8 @@ Base clients are built once per RustDesk release; the Client Builder then
 brands each customer's installer on the server in seconds. Run from the
 RustDesk source folder:
 
-    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console]
-    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console]
+    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates]
+    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates]
 
 --check only confirms every change still applies to this RustDesk version,
 so a new release that moved the code fails early and clearly.
@@ -199,6 +199,37 @@ def ios_share(p):
     p.append("libs/scrap/src/lib.rs", "comtech_ios_input.rs", "iOS ignores remote input")
 
 
+def linux_updates(p):
+    """Installed Linux clients update themselves from our server.
+
+    The root service runs comtech_linux_update.rs, which asks the API for a
+    newer package and installs it with systemd-run when nobody is connected.
+    To ask the user's --server whether anyone is, it uses the IPC message
+    1.5.0 added for macOS's updater, switched on for Linux too.
+    """
+    ipc = "src/ipc.rs"
+    variant = '#[cfg(target_os = "macos")]\n    HasNoActiveConns(Option<bool>),'
+    handler = '#[cfg(target_os = "macos")]\n        Data::HasNoActiveConns(None) => {'
+    text = open(ipc, encoding="utf-8").read() if os.path.isfile(ipc) else ""
+    if variant not in text or handler not in text:
+        print("skipped: Linux updates need RustDesk 1.5.0 or newer")
+        return
+    both = '#[cfg(any(target_os = "macos", target_os = "linux"))]\n'
+    p.replace(ipc, variant, both + "    HasNoActiveConns(Option<bool>),",
+              "Linux can ask whether anyone is connected (message)")
+    p.replace(ipc, handler, both + "        Data::HasNoActiveConns(None) => {",
+              "Linux can ask whether anyone is connected (answer)")
+    p.replace("src/platform/linux.rs", "    start_uinput_service();\n",
+              "    start_uinput_service();\n    crate::comtech_linux_update::start();\n",
+              "the Linux service checks for updates")
+    p.replace("src/lib.rs", "mod updater;\n",
+              'mod updater;\n#[cfg(target_os = "linux")]\npub mod comtech_linux_update;\n',
+              "the Linux updater is part of the app")
+    p.write("src/comtech_linux_update.rs",
+            open(os.path.join(HERE, "comtech_linux_update.rs"), encoding="utf-8").read(),
+            "the Linux updater")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", default="")
@@ -210,6 +241,7 @@ def main():
     ap.add_argument("--ios-share", action="store_true", help="iOS can share its screen from a broadcast extension")
     ap.add_argument("--appimage", action="store_true", help="Linux reads settings attached to its AppImage")
     ap.add_argument("--console", action="store_true", help="technician builds open the Comtech console")
+    ap.add_argument("--linux-updates", action="store_true", help="installed Linux clients update themselves from our server")
     a = ap.parse_args()
     if not a.check and not a.key:
         fail("no settings public key")
@@ -314,6 +346,9 @@ def main():
 
     if a.ios_share:
         ios_share(p)
+
+    if a.linux_updates:
+        linux_updates(p)
 
     if a.console:
         # the console package sits beside the app; the home tab shows it when

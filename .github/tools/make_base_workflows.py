@@ -171,11 +171,11 @@ _, ljobs = split_jobs(src)
 build_step = [s for s in split_steps(dict(ljobs)['build-rustdesk-linux'])[1] if step_name(s) == 'Build rustdesk'][0]
 assert placeholder_src in build_step, 'Linux build step changed; update the placeholder'
 build(
-    'generator-linux.yml', 'base-linux.yml', 'Comtech Linux Base Client', '--appimage --console', 'ubuntu-22.04',
+    'generator-linux.yml', 'base-linux.yml', 'Comtech Linux Base Client', '--appimage --console --linux-updates', 'ubuntu-22.04',
     jobs_keep={'setup', 'generate-bridge-linux', 'build-rustdesk-linux', 'build-appimage', 'cleanup'},
     main_jobs={
         'build-rustdesk-linux': (COMMON_DROP, {
-            'allow custom.txt': checkout_patches() + comtech_step('--appimage --console'),
+            'allow custom.txt': checkout_patches() + comtech_step('--appimage --console --linux-updates'),
             'Build rustdesk': build_step.replace(placeholder_src, placeholder_new),
         }, {
             'Rename archlinux package': upload_step([
