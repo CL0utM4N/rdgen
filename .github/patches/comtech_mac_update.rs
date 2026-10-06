@@ -177,7 +177,10 @@ for uid in $UIDS; do
 done
 launchctl bootout system/"$DAEMON_LABEL" || true
 sleep 2
-pkill -f "$BUNDLE/Contents/MacOS/" || true
+ps -axo pid=,args= | grep -F "$BUNDLE/Contents/MacOS/" | grep -v grep | awk '{print $1}' | while read -r pid; do
+    kill "$pid" 2>/dev/null || true
+done
+sleep 1
 
 rm -rf "$BUNDLE.bak"
 mv "$BUNDLE" "$BUNDLE.bak" || rollback
