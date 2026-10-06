@@ -226,6 +226,13 @@ def main():
               "  if (platform == kPeerPlatformMacOS) {\n    platform = 'mac';\n",
               "  if (platform == 'iOS') {\n    platform = 'ios';\n  } else if (platform == kPeerPlatformMacOS) {\n    platform = 'mac';\n",
               "iOS devices have their own icon")
+    # the device-group list works the platform out from the OS the device
+    # reports ("ios / iOS 26.1"), and knew no iOS
+    p.replace("flutter/lib/common/hbbs/hbbs.dart",
+              "      case 'android':\n        return kPeerPlatformAndroid;\n",
+              "      case 'android':\n        return kPeerPlatformAndroid;\n"
+              "      case 'ios':\n      case 'ipados':\n        return 'iOS';\n",
+              "iOS devices in device groups have their own icon")
     p.write("flutter/assets/ios.svg", open(os.path.join(HERE, "comtech_ios.svg"), encoding="utf-8").read(), "the iOS icon")
 
     if a.updates:
