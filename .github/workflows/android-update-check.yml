@@ -80,7 +80,9 @@ jobs:
 
       - name: Compile the Android side
         working-directory: flutter/android
-        run: ./gradlew --no-daemon :app:processDebugManifest :app:compileDebugKotlin
+        run: |
+          sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx3g/g" gradle.properties
+          ./gradlew --no-daemon --stacktrace :app:processDebugManifest :app:compileDebugKotlin
 
       - name: Check the merged manifest
         run: |
