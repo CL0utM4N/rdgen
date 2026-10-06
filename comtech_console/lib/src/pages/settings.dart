@@ -152,10 +152,33 @@ class _SecurityPageState extends State<SecurityPage> {
   bool loading = false, saving = false;
   int version = 0;
 
+  /// The BitLocker key collection switch; null until loaded (or not allowed).
+  Map<String, dynamic>? bitlocker;
+  bool savingBitlocker = false;
+  final canSettings = can(['settings']);
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadBitlocker();
+  }
+
+  Future<void> _loadBitlocker() async {
+    try {
+      final d = await api.get('/bitlocker/settings', quiet: true);
+      if (mounted) setState(() => bitlocker = Map<String, dynamic>.from(d as Map));
+    } catch (_) {}
+  }
+
+  Future<void> _setBitlocker(bool on) async {
+    setState(() => savingBitlocker = true);
+    try {
+      final d = await api.post('/bitlocker/settings', body: {'enabled': on});
+      bitlocker = Map<String, dynamic>.from(d as Map);
+      Toasts.success(T('OperationSuccess'));
+    } catch (_) {}
+    if (mounted) setState(() => savingBitlocker = false);
   }
 
   Future<void> _load() async {
@@ -254,6 +277,24 @@ class _SecurityPageState extends State<SecurityPage> {
                 ),
                 help: T('SignedInConnectionsHelp'),
               ),
+              if (bitlocker != null) ...[
+                h4(T('BitlockerKeys')),
+                FormItem(
+                  label: T('BitlockerCollect'),
+                  labelWidth: 260,
+                  help: bitlocker!['data_key'] == true ? T('BitlockerCollectHelp') : T('BitlockerNoDataKey'),
+                  warnHelp: bitlocker!['data_key'] != true,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: CtSwitch(
+                      value: bitlocker!['enabled'] == true,
+                      loading: savingBitlocker,
+                      // turning it off is always allowed; turning it on needs a data key
+                      onChanged: canSettings && (bitlocker!['data_key'] == true || bitlocker!['enabled'] == true) ? _setBitlocker : null,
+                    ),
+                  ),
+                ),
+              ],
               h4(T('Backups')),
               item(T('BackupKeep'), number('backup_keep', 1, 365, T('BackupsUnit')), help: T('BackupKeepHelp')),
               h4(T('Sessions')),

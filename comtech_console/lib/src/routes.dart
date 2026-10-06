@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'console.dart';
 import 'pages/address_books.dart';
 import 'pages/audit.dart';
+import 'pages/bitlocker.dart';
 import 'pages/client_build.dart';
 import 'pages/dashboard.dart';
 import 'pages/devices.dart';
@@ -60,6 +61,7 @@ final sections = <SectionDef>[
     RouteDef('DeviceApproval', 'DeviceApprovals', Icons.check_circle_outline, (_) => const ApprovalsPage()),
     RouteDef('Strategy', 'ClientPolicies', Icons.tune, (_) => const StrategyPage()),
     RouteDef('VersionReport', 'VersionReport', Icons.pie_chart_outline, (_) => const VersionReportPage()),
+    RouteDef('Bitlocker', 'BitlockerKeys', Icons.key_outlined, (_) => const BitlockerPage()),
   ]),
   SectionDef('AddressBooksSection', 'MenuAddressBooks', [
     RouteDef('UserAddressBook', 'MenuAllAddressBooks', Icons.menu_book_outlined, (_) => const AddressBookPage(mine: false)),

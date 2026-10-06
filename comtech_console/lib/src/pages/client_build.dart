@@ -44,6 +44,9 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
   List<Row_> groups = [], users = [];
   Timer? timer;
 
+  /// Builds whose BitLocker switch is being saved.
+  final Set<int> savingBitlocker = {};
+
   @override
   void initState() {
     super.initState();
@@ -113,6 +116,20 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
     } catch (_) {}
   }
 
+  bool isWindows(dynamic platform) => '$platform'.startsWith('windows');
+
+  Future<void> _setBitlocker(Row_ r, bool on) async {
+    final id = asInt(r['id']);
+    setState(() => savingBitlocker.add(id));
+    try {
+      final d = await api.post('/client_build/bitlocker', body: {'id': id, 'enabled': on});
+      r['bitlocker_escrow'] = d is Map ? d['bitlocker_escrow'] == true : on;
+      Toasts.success(T(r['bitlocker_escrow'] == true ? 'BitlockerBuildOn' : 'BitlockerBuildOff'));
+    } catch (_) {}
+    if (mounted) setState(() => savingBitlocker.remove(id));
+    ctl.touch();
+  }
+
   Future<void> _del(Row_ r) async {
     if (!await confirm(context, T('Confirm?', {'param': T('Delete')}))) return;
     try {
@@ -142,6 +159,7 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
         'direction': 'both',
         'disable_installation': false,
         'disable_settings': false,
+        'bitlocker_escrow': false,
         'theme': 'system',
         'theme_override': false,
         'password_approve_mode': 'password-click',
@@ -287,6 +305,20 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
           ),
           sw('disable_installation', T('DisableInstallation')),
           sw('disable_settings', T('DisableSettings')),
+          if (isWindows(f['platform']))
+            item(
+              '',
+              Align(
+                alignment: Alignment.centerLeft,
+                child: CtCheckbox(
+                  value: f['bitlocker_escrow'] == true,
+                  label: Text(T('BitlockerEscrow')),
+                  onChanged: opts['bitlocker_available'] == true ? (v) => set(() => f['bitlocker_escrow'] = v) : null,
+                ),
+              ),
+              help: opts['bitlocker_available'] == true ? T('BitlockerEscrowHelp') : T('BitlockerNeedsSetting'),
+              warn: opts['bitlocker_available'] != true,
+            ),
         ];
         final server = [
           note(T('ServerDefaultsHelp')),
@@ -394,7 +426,13 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
             return Toasts.error(T('ParamRequired', {'param': T('ExeFileName')}));
           }
           set(() => submitting = true);
-          final data = {...f, 'device_group_id': f['device_group_id'] ?? 0, 'preset_user_id': f['preset_user_id'] ?? 0, 'instant': instant()};
+          final data = {
+            ...f,
+            'device_group_id': f['device_group_id'] ?? 0,
+            'preset_user_id': f['preset_user_id'] ?? 0,
+            'instant': instant(),
+            'bitlocker_escrow': f['bitlocker_escrow'] == true && isWindows(f['platform']) && opts['bitlocker_available'] == true,
+          };
           try {
             final d = await api.post('/client_build/create', body: data, timeout: const Duration(seconds: 120));
             Toasts.success(!instant() ? T('BuildStarted') : (d is Map && d['status'] == 'in_progress' ? T('InstallerMaking') : T('InstallerReady')));
@@ -471,6 +509,18 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
                           CtButton(T('CopyLink'), link: true, size: BtnSize.small, onPressed: () => copyText(downloadUrl(r, f))),
                         ]),
                     ])),
+            Col(T('BitlockerColumn'),
+                width: 110,
+                cell: (r, _) => isWindows(r['platform']) && '${r['kind'] ?? ''}'.isEmpty
+                    ? Tooltip(
+                        message: T('BitlockerBuildHelp'),
+                        child: CtSwitch(
+                          value: r['bitlocker_escrow'] == true,
+                          loading: savingBitlocker.contains(asInt(r['id'])),
+                          onChanged: (v) => _setBitlocker(r, v),
+                        ),
+                      )
+                    : const Text('-')),
             Col(T('CreatedAt'), prop: 'created_at', width: 160),
             Col(T('Actions'),
                 width: 320,

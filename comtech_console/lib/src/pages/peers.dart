@@ -236,6 +236,7 @@ class _PeerPageState extends State<PeerPage> {
   late List<_Column> columns;
   final canManage = can(['peers.manage']);
   final canAb = can(['address_books']);
+  final canBitlocker = can(['bitlocker']);
 
   static const all = [
     ('id', 'Id'),
@@ -253,7 +254,11 @@ class _PeerPageState extends State<PeerPage> {
     ('note', 'Note'),
     ('created_at', 'CreatedAt'),
     ('updated_at', 'UpdatedAt'),
+    ('bitlocker_summary', 'BitlockerColumn'),
   ];
+
+  /// Columns that start hidden until turned on in the column settings.
+  static const hiddenByDefault = {'bitlocker_summary'};
 
   @override
   void initState() {
@@ -271,7 +276,7 @@ class _PeerPageState extends State<PeerPage> {
           if (all.any((a) => a.$1 == s['name'])) _Column('${s['name']}', all.firstWhere((a) => a.$1 == s['name']).$2, s['visible'] != false),
       ];
     } catch (_) {}
-    columns = [...saved, for (final a in all) if (!saved.any((s) => s.name == a.$1)) _Column(a.$1, a.$2, true)];
+    columns = [...saved, for (final a in all) if (!saved.any((s) => s.name == a.$1)) _Column(a.$1, a.$2, !hiddenByDefault.contains(a.$1))];
   }
 
   @override
@@ -336,6 +341,13 @@ class _PeerPageState extends State<PeerPage> {
         return Col(T('Note'), prop: 'note', minWidth: 160, ellipsis: true);
       case 'created_at':
         return Col(T('CreatedAt'), prop: 'created_at', width: 150);
+      case 'bitlocker_summary':
+        return Col(T('BitlockerColumn'), minWidth: 130, cell: (r, _) {
+          final s = '${r['bitlocker_summary'] ?? ''}';
+          final t = asInt(r['bitlocker_checked_at']);
+          final text = Text(s.isEmpty ? '-' : s, maxLines: 1, overflow: TextOverflow.ellipsis);
+          return t > 0 ? Tooltip(message: T('BitlockerCheckedAt', {'time': formatTime(t)}), child: text) : text;
+        });
       default:
         return Col(T('UpdatedAt'), prop: 'updated_at', width: 150);
     }
@@ -439,6 +451,16 @@ class _PeerPageState extends State<PeerPage> {
       final d = await api.post('/peer/requestUpdate',
           body: rows.isNotEmpty ? {'row_ids': rows.map((r) => r['row_id']).toList()} : {'all': true});
       Toasts.success(T('UpdateNowSent', {'n': (d is Map ? d['queued'] : null) ?? 0}));
+    } catch (_) {}
+  }
+
+  // "Refresh BitLocker": the selected devices report their keys on their next check-in
+  Future<void> _refreshBitlocker() async {
+    final rows = ctl.selectedRows;
+    if (rows.isEmpty) return Toasts.warning(T('PleaseSelectData'));
+    try {
+      final d = await api.post('/bitlocker/refresh', body: {'row_ids': rows.map((r) => r['row_id']).toList()});
+      Toasts.success(T('BitlockerRefreshSent', {'n': (d is Map ? d['queued'] : null) ?? 0}));
     } catch (_) {}
   }
 
@@ -565,6 +587,7 @@ class _PeerPageState extends State<PeerPage> {
           if (canManage) CtButton(T('Import'), tone: Tone.danger, icon: Icons.keyboard_arrow_down, onPressed: _import),
           if (canManage) CtButton(T('BatchDelete'), tone: Tone.danger, onPressed: _batchDelete),
           if (canManage) CtButton(T('UpdateNow'), tone: Tone.primary, onPressed: _requestUpdate),
+          if (canBitlocker) CtButton(T('BitlockerRefresh'), tone: Tone.primary, onPressed: _refreshBitlocker),
           if (canAb) CtButton(T('BatchAddToAB'), tone: Tone.primary, onPressed: () => batchAddToAb(context, mine: false, peers: ctl.selectedRows, users: users)),
         ]),
       ],
@@ -581,6 +604,7 @@ class _PeerPageState extends State<PeerPage> {
                       MenuAction(T('TransferFiles'), () => host.connect('${r['id']}', fileTransfer: true)),
                       if (canManage) MenuAction(T('Edit'), () => _edit(r)),
                       if (canAb) MenuAction(T('AddToAddressBook'), () => addPeerToAb(context, r, users)),
+                      if (canBitlocker) MenuAction(T('BitlockerKeys'), () => Console.I.go('Bitlocker', {'peer_id': '${r['id']}'})),
                       if (canManage) MenuAction(T('Delete'), () => _del(r), divided: true, danger: true),
                     ],
                   ),
