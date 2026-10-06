@@ -1,8 +1,12 @@
-// Comtech: Android phones update themselves from our server.
+// Comtech: Android and iOS phones update themselves from our server.
 //
 // A phone can't install an update by itself: it downloads the APK, checks it
 // against the SHA-256 the server gave, then asks its user to install it. The
 // first time, Android also asks to allow installing apps from this one.
+//
+// An iPhone can't install an IPA at all. The app saves it in its Documents
+// folder, which the Files app shows under On My iPhone, and tells the user
+// where it is, with a button to open it in AltStore or SideStore.
 //
 // Only Client Builder builds (the ones with a comtech-build setting) take
 // part. The check runs while the app is running, a first time after 30
@@ -15,6 +19,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -26,10 +31,36 @@ const _kCheckEvery = Duration(minutes: 10);
 const _kAskEvery = Duration(hours: 6);
 const _kPromptedOption = 'comtech-update-prompted';
 const _kMaxApkBytes = 400 * 1024 * 1024;
+const _kIosChannel = MethodChannel('comtech_update');
 
 bool _comtechUpdateBusy = false;
 
+// iOS: a saved update waits here until the app is open for the user to see it
+String? _comtechPendingVersion;
+String? _comtechPendingPath;
+bool _comtechObserving = false;
+
+class _ComtechResumeObserver with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _comtechShowPending();
+  }
+}
+
+void _comtechShowPending() {
+  final version = _comtechPendingVersion;
+  final path = _comtechPendingPath;
+  if (version == null || path == null) return;
+  _comtechPendingVersion = null;
+  _comtechPendingPath = null;
+  _comtechAskToOpen(version, path);
+}
+
 void comtechStartUpdates() {
+  if (isIOS && !_comtechObserving) {
+    _comtechObserving = true;
+    WidgetsBinding.instance.addObserver(_ComtechResumeObserver());
+  }
   Timer(_kFirstCheck, () {
     _comtechUpdateRound();
     Timer.periodic(_kCheckEvery, (_) => _comtechUpdateRound());
@@ -50,6 +81,7 @@ Future<void> _comtechUpdateRound() async {
 
 String? _comtechArch() {
   final abi = Abi.current();
+  if (isIOS) return abi == Abi.iosArm64 ? 'aarch64' : null;
   if (abi == Abi.androidArm64) return 'aarch64';
   if (abi == Abi.androidArm) return 'armv7';
   if (abi == Abi.androidX64) return 'x86_64';
@@ -65,7 +97,7 @@ Future<void> _comtechCheckOnce() async {
   if (arch == null) return;
   final current = await bind.mainGetVersion();
 
-  final uri = Uri.parse('$api/api/clientgen/android-update-check').replace(
+  final uri = Uri.parse('$api/api/clientgen/${isIOS ? 'ios' : 'android'}-update-check').replace(
     queryParameters: {
       'id': await bind.mainGetMyId(),
       'uuid': await bind.mainGetUuid(),
@@ -87,7 +119,8 @@ Future<void> _comtechCheckOnce() async {
   final file = '${update['file']}';
   final url = '${update['url']}';
   if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256) ||
-      !RegExp(r'^[A-Za-z0-9._-]+\.apk$').hasMatch(file) ||
+      !RegExp(isIOS ? r'^[A-Za-z0-9._-]+\.ipa$' : r'^[A-Za-z0-9._-]+\.apk$')
+          .hasMatch(file) ||
       !url.startsWith('$api/api/clientgen/update/') ||
       newVersion.isEmpty ||
       newVersion == current) {
@@ -110,6 +143,16 @@ Future<void> _comtechCheckOnce() async {
   await bind.mainSetLocalOption(
       key: _kPromptedOption,
       value: '$newVersion ${DateTime.now().millisecondsSinceEpoch ~/ 1000}');
+  if (isIOS) {
+    // no notification: the user is told while the app is open
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      _comtechAskToOpen(newVersion, path);
+    } else {
+      _comtechPendingVersion = newVersion;
+      _comtechPendingPath = path;
+    }
+    return;
+  }
   await gFFI.invokeMethod(
       'comtech_update_notify', {'version': newVersion, 'path': path});
   if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
@@ -117,9 +160,13 @@ Future<void> _comtechCheckOnce() async {
   }
 }
 
-// the APK goes in the cache folder the app's FileProvider shares
+// the APK goes in the cache folder the app's FileProvider shares; the IPA in
+// Documents/Updates, which the Files app shows
 Future<String?> _comtechDownload(String url, String file, String sha256) async {
-  final dir = Directory('${(await getTemporaryDirectory()).path}/comtech-update');
+  final base = isIOS
+      ? '${(await getApplicationDocumentsDirectory()).path}/Updates'
+      : '${(await getTemporaryDirectory()).path}/comtech-update';
+  final dir = Directory(base);
   if (await dir.exists()) {
     await for (final f in dir.list()) {
       try {
@@ -178,6 +225,24 @@ void _comtechAskToInstall(String version, String path) {
       dialogButton('Install', onPressed: () {
         dialogManager.dismissAll();
         gFFI.invokeMethod('comtech_install_apk', {'path': path});
+      }),
+    ],
+  );
+}
+
+void _comtechAskToOpen(String version, String path) {
+  final dialogManager = gFFI.dialogManager;
+  final app = bind.mainGetAppNameSync();
+  msgBoxCommon(
+    dialogManager,
+    'Update available',
+    Text('Version $version has been saved to Files › On My iPhone › $app › '
+        'Updates. Open it in AltStore or SideStore to install it.'),
+    [
+      dialogButton('Later', isOutline: true, onPressed: dialogManager.dismissAll),
+      dialogButton('Open in…', onPressed: () {
+        dialogManager.dismissAll();
+        _kIosChannel.invokeMethod('comtech_share_file', {'path': path});
       }),
     ],
   );

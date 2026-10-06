@@ -4,8 +4,8 @@ Base clients are built once per RustDesk release; the Client Builder then
 brands each customer's installer on the server in seconds. Run from the
 RustDesk source folder:
 
-    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates]
-    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates]
+    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates]
+    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates]
 
 --check only confirms every change still applies to this RustDesk version,
 so a new release that moved the code fails early and clearly.
@@ -254,10 +254,45 @@ def mac_updates(p):
             "the Mac updater")
 
 
+def phone_updates_common(p):
+    """What Android's and iOS's updaters share: the hook that starts them, the
+    Dart file, and the packages it needs. Written once; a second call (a build
+    with both flags) finds it done."""
+    main_dart = "flutter/lib/main.dart"
+    hook = "  checkUpdate();\n  if (isAndroid) androidChannelInit();\n"
+    done = ("  if (isAndroid || isIOS) {\n    comtechStartUpdates();\n  } else {\n    checkUpdate();\n  }\n"
+            "  if (isAndroid) androidChannelInit();\n")
+    imp = "import 'package:flutter_hbb/common/widgets/overlay.dart';\n"
+    pubspec = "flutter/pubspec.yaml"
+    http = "  http: ^1.1.0\n"
+
+    def applied(path, text):
+        return os.path.isfile(path) and text in open(path, encoding="utf-8").read()
+
+    # only the phone apps are the ones that update: the desktop one keeps its own
+    if applied(main_dart, done):
+        print("ok: the phone app checks for updates with ours (already)")
+    else:
+        p.replace(main_dart, hook, done, "the phone app checks for updates with ours")
+    if applied(main_dart, imp + "import 'package:flutter_hbb/comtech_update.dart';\n"):
+        print("ok: the phone app has the updater (already)")
+    else:
+        p.replace(main_dart, imp, imp + "import 'package:flutter_hbb/comtech_update.dart';\n",
+                  "the phone app has the updater")
+    # crypto is only a transitive dependency in RustDesk
+    if applied(pubspec, http + "  crypto: any\n"):
+        print("ok: the updater checks downloads with crypto (already)")
+    else:
+        p.replace(pubspec, http, http + "  crypto: any\n", "the updater checks downloads with crypto")
+    p.write("flutter/lib/comtech_update.dart",
+            open(os.path.join(HERE, "comtech_phone_update.dart"), encoding="utf-8").read(),
+            "the phone updater")
+
+
 def android_updates(p):
     """Installed phones download updates and ask their user to install them.
 
-    Android can't install an app silently. comtech_update.dart checks our
+    Android can't install an app silently. comtech_update.dart (comtech_phone_update.dart in rdgen) checks our
     server while the app is running, downloads the APK, checks its SHA-256 and
     asks to install it, with a dialog and a notification. comtech_android_update.kt
     opens Android's installer, through a FileProvider for the download folder.
@@ -275,20 +310,7 @@ def android_updates(p):
         if not os.path.isfile(path) or text not in open(path, encoding="utf-8").read():
             print("skipped: Android updates need RustDesk 1.5.0 or newer")
             return
-    # only the phone app is the one that updates: the desktop one keeps its own
-    p.replace(main_dart, hook,
-              "  if (isAndroid) {\n    comtechStartUpdates();\n  } else {\n    checkUpdate();\n  }\n"
-              "  if (isAndroid) androidChannelInit();\n",
-              "the phone app checks for updates with ours")
-    p.replace(main_dart, "import 'package:flutter_hbb/common/widgets/overlay.dart';\n",
-              "import 'package:flutter_hbb/common/widgets/overlay.dart';\nimport 'package:flutter_hbb/comtech_update.dart';\n",
-              "the phone app has the updater")
-    # crypto is only a transitive dependency in RustDesk
-    p.replace("flutter/pubspec.yaml", "  http: ^1.1.0\n", "  http: ^1.1.0\n  crypto: any\n",
-              "the updater checks downloads with crypto")
-    p.write("flutter/lib/comtech_update.dart",
-            open(os.path.join(HERE, "comtech_android_update.dart"), encoding="utf-8").read(),
-            "the phone updater")
+    phone_updates_common(p)
     p.write("flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/ComtechUpdate.kt",
             open(os.path.join(HERE, "comtech_android_update.kt"), encoding="utf-8").read(),
             "the phone's installer and notification")
@@ -335,6 +357,52 @@ def android_updates(p):
             "the folder the installer may read")
 
 
+def ios_updates(p):
+    """iPhones download updates into Files, for AltStore or SideStore.
+
+    iOS can't install an app by itself. comtech_update.dart saves the IPA in
+    the app's Documents/Updates folder (shown by the Files app, which is why
+    the Info.plist shares the folder), then tells the user where it is, with a
+    button that opens the share sheet from ComtechUpdate code appended to
+    AppDelegate.swift (a new file would need adding to the Xcode project).
+    """
+    main_dart = "flutter/lib/main.dart"
+    hook = "  checkUpdate();\n  if (isAndroid) androidChannelInit();\n"
+    done = "  if (isAndroid || isIOS) {\n    comtechStartUpdates();\n"
+    delegate = "flutter/ios/Runner/AppDelegate.swift"
+    register = "    GeneratedPluginRegistrant.register(with: self)\n"
+    plist = "flutter/ios/Runner/Info.plist"
+    sharing = "\t<key>UIFileSharingEnabled</key>\n\t<true/>\n"
+    in_place = "\t<key>LSSupportsOpeningDocumentsInPlace</key>\n\t<true/>\n"
+
+    def has(path, text):
+        return os.path.isfile(path) and text in open(path, encoding="utf-8").read()
+
+    anchors = [(delegate, register), ("flutter/pubspec.yaml", "  http: ^1.1.0\n")]
+    missing = [a for a in anchors if not has(*a)]
+    if not (has(main_dart, hook) or has(main_dart, done)):
+        missing.append(main_dart)
+    if not os.path.isfile(plist):
+        missing.append(plist)
+    elif not has(plist, "</dict>\n</plist>") and not has(plist, sharing):
+        missing.append(plist)
+    if missing:
+        print("skipped: iOS updates need RustDesk 1.5.0 or newer")
+        return
+    phone_updates_common(p)
+    p.replace(delegate, register, register + "    comtechRegisterUpdates(self)\n",
+              "the app can hand the update to AltStore or SideStore")
+    p.append(delegate, "comtech_ios_update.swift", "the share sheet for the saved update")
+    if has(plist, in_place):
+        print("ok: Files can open the app's folder in place (already)")
+    elif has(plist, sharing):
+        p.replace(plist, sharing, sharing + in_place, "Files can open the app's folder in place")
+    else:
+        # the Updates folder has to show in Files, so both keys are needed
+        p.replace(plist, "</dict>\n</plist>", sharing + in_place + "</dict>\n</plist>",
+                  "the app's folder shows in Files")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", default="")
@@ -349,6 +417,7 @@ def main():
     ap.add_argument("--linux-updates", action="store_true", help="installed Linux clients update themselves from our server")
     ap.add_argument("--mac-updates", action="store_true", help="installed Macs update when the console asks")
     ap.add_argument("--android-updates", action="store_true", help="Android phones download updates and ask to install them")
+    ap.add_argument("--ios-updates", action="store_true", help="iPhones download updates into Files for AltStore or SideStore")
     a = ap.parse_args()
     if not a.check and not a.key:
         fail("no settings public key")
@@ -462,6 +531,9 @@ def main():
 
     if a.android_updates:
         android_updates(p)
+
+    if a.ios_updates:
+        ios_updates(p)
 
     if a.console:
         # the console package sits beside the app; the home tab shows it when
