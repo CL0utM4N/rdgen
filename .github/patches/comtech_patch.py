@@ -94,6 +94,14 @@ def quote_app_name(p):
     # the same key, passed positionally: share_rdp and an update's DisplayIcon
     p.sub(win, r"reg add \{\} /f /v", r'reg add \\"{}\\" /f /v',
           "share RDP and the update's icon reach the registry", 2)
+    # 1.5.0 refuses to install an app whose name isn't [a-zA-Z0-9-]+, to keep
+    # the name out of its install script's syntax. With every use quoted
+    # above, spaces are safe; nothing else is let through (and the Client
+    # Builder refuses quotes, & | % and the like in names).
+    check = "character.is_ascii_alphanumeric() || character == '-')"
+    if check in open(win, encoding="utf-8").read():
+        p.replace(win, check, "character.is_ascii_alphanumeric() || character == '-' || character == ' ')",
+                  "app names with spaces can be installed")
 
 
 def ios_share(p):
