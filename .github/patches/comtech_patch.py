@@ -4,8 +4,8 @@ Base clients are built once per RustDesk release; the Client Builder then
 brands each customer's installer on the server in seconds. Run from the
 RustDesk source folder:
 
-    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates]
-    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates]
+    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--bitlocker] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates]
+    python comtech_patch.py --check [--updates] [--packer] [--bitlocker] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates]
 
 --check only confirms every change still applies to this RustDesk version,
 so a new release that moved the code fails early and clearly.
@@ -403,12 +403,48 @@ def ios_updates(p):
                   "the app's folder shows in Files")
 
 
+def bitlocker(p):
+    """Installed Windows clients escrow their BitLocker recovery keys.
+
+    The SYSTEM service reads the keys that already exist on each fixed drive
+    (it never adds one) and POSTs them to our API, which stores them encrypted
+    and audit-logs every reveal -- the standard escrow a technician needs to
+    unlock a machine on the blue recovery screen. The heartbeat gains a
+    comtech_build field so the server can link the device to its build; the
+    server then returns "comtech_bitlocker": true in a reply to ask for a
+    report, which comtech_bitlocker.rs collects and sends once.
+    """
+    p.write("src/comtech_bitlocker.rs",
+            open(os.path.join(HERE, "comtech_bitlocker.rs"), encoding="utf-8").read(),
+            "the BitLocker key reporter")
+    p.replace("src/lib.rs", "mod updater;\n",
+              'mod updater;\n#[cfg(windows)]\npub mod comtech_bitlocker;\n',
+              "the BitLocker reporter is part of the app")
+    # tell the server this client's build, so it knows whether to ask for keys
+    p.replace("src/hbbs_http/sync.rs",
+              '                v["modified_at"] = json!(modified_at);\n',
+              '                v["modified_at"] = json!(modified_at);\n'
+              '                v["comtech_build"] = json!(config::HARD_SETTINGS.read().unwrap()'
+              '.get("comtech-build").cloned().unwrap_or_default());\n',
+              "the heartbeat tells the server the build")
+    # act on the reply. Inserted before the disconnect hook (the same anchor
+    # --updates uses), so it applies whether or not --updates also ran.
+    hook = '                        if let Some(conns)  = rsp.remove("disconnect") {\n'
+    p.replace("src/hbbs_http/sync.rs", hook,
+              '                        #[cfg(windows)]\n'
+              '                        if rsp.remove("comtech_bitlocker").and_then(|v| v.as_bool()).unwrap_or(false) {\n'
+              '                            crate::comtech_bitlocker::report(url.replace("heartbeat", "comtech/bitlocker"));\n'
+              '                        }\n' + hook,
+              "the console can ask for a BitLocker report")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", default="")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--updates", action="store_true", help="updates come from our server (Windows)")
     ap.add_argument("--packer", action="store_true", help="Windows installer reads its files from the end of the exe")
+    ap.add_argument("--bitlocker", action="store_true", help="installed Windows clients escrow their BitLocker recovery keys")
     ap.add_argument("--android", action="store_true", help="Android reads its settings from assets/custom.txt")
     ap.add_argument("--ios", action="store_true", help="iOS reads its settings from assets/custom.txt")
     ap.add_argument("--ios-share", action="store_true", help="iOS can share its screen from a broadcast extension")
@@ -464,6 +500,9 @@ def main():
         # updates install by themselves; don't offer RustDesk's download page
         p.replace("flutter/lib/desktop/pages/desktop_home_page.dart", "updateUrl.isNotEmpty", "false",
                   "no update banner", count=0)
+
+    if a.bitlocker:
+        bitlocker(p)
 
     if a.packer:
         old = ('#[cfg(windows)]\nconst BIN_DATA: &[u8] = include_bytes!("../data.bin");\n'
