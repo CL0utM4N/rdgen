@@ -55,7 +55,7 @@ Running it again on a PC that already has RustDesk re-points it and re-enrols it
 
 - **Builds are instant.** With **Instant** on, the installers are made on our server from the **base client** for that platform, shown at the top of the page: Windows in seconds, Mac, Linux and Android in a minute or two. They carry the customer's device group and settings, and where the platform allows, name, icon and logo. Settings a platform can't change are greyed out with the reason.
 - Mac installers come as a .zip: open it and drag the app to Applications. Linux gets .deb, .rpm, Arch and AppImage packages (Flatpak needs Instant off). Android gets an .apk for each processor type; phones with an older Comtech Android build need it removed and the new one installed once.
-- **Update installed Windows clients** (under **Settings** on that card) lets Windows clients from instant builds update themselves once a newer base client is built.
+- **Update installed Windows and Linux clients** (under **Settings** on that card) lets Windows and Linux clients from instant builds update themselves once a newer base client is built.
 - The base client is built on GitHub once per RustDesk release, taking about an hour. When RustDesk releases a new version, the page shows **Update available** and admins get an email. With automatic updates on, the new base builds by itself. **Rebuild** on an instant build remakes it from the newest base.
 - If a new RustDesk version changes the code our changes rely on, the base build stops early and says so. Instant builds keep using the previous base until it's fixed.
 - 32-bit Windows, and anything with Instant off, builds on GitHub, taking 20 to 40 minutes.
