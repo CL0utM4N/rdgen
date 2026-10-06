@@ -4,8 +4,8 @@ Base clients are built once per RustDesk release; the Client Builder then
 brands each customer's installer on the server in seconds. Run from the
 RustDesk source folder:
 
-    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates]
-    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates]
+    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates]
+    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates]
 
 --check only confirms every change still applies to this RustDesk version,
 so a new release that moved the code fails early and clearly.
@@ -254,6 +254,87 @@ def mac_updates(p):
             "the Mac updater")
 
 
+def android_updates(p):
+    """Installed phones download updates and ask their user to install them.
+
+    Android can't install an app silently. comtech_update.dart checks our
+    server while the app is running, downloads the APK, checks its SHA-256 and
+    asks to install it, with a dialog and a notification. comtech_android_update.kt
+    opens Android's installer, through a FileProvider for the download folder.
+    """
+    main_dart = "flutter/lib/main.dart"
+    hook = "  checkUpdate();\n  if (isAndroid) androidChannelInit();\n"
+    activity = "flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt"
+    create = "    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n"
+    case = '                "cancel_notification" -> {\n'
+    manifest = "flutter/android/app/src/main/AndroidManifest.xml"
+    notify = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n'
+    wanted = [(main_dart, hook), (activity, create), (activity, case), (manifest, notify),
+              (manifest, "    </application>\n"), ("flutter/pubspec.yaml", "  http: ^1.1.0\n")]
+    for path, text in wanted:
+        if not os.path.isfile(path) or text not in open(path, encoding="utf-8").read():
+            print("skipped: Android updates need RustDesk 1.5.0 or newer")
+            return
+    # only the phone app is the one that updates: the desktop one keeps its own
+    p.replace(main_dart, hook,
+              "  if (isAndroid) {\n    comtechStartUpdates();\n  } else {\n    checkUpdate();\n  }\n"
+              "  if (isAndroid) androidChannelInit();\n",
+              "the phone app checks for updates with ours")
+    p.replace(main_dart, "import 'package:flutter_hbb/common/widgets/overlay.dart';\n",
+              "import 'package:flutter_hbb/common/widgets/overlay.dart';\nimport 'package:flutter_hbb/comtech_update.dart';\n",
+              "the phone app has the updater")
+    # crypto is only a transitive dependency in RustDesk
+    p.replace("flutter/pubspec.yaml", "  http: ^1.1.0\n", "  http: ^1.1.0\n  crypto: any\n",
+              "the updater checks downloads with crypto")
+    p.write("flutter/lib/comtech_update.dart",
+            open(os.path.join(HERE, "comtech_android_update.dart"), encoding="utf-8").read(),
+            "the phone updater")
+    p.write("flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/ComtechUpdate.kt",
+            open(os.path.join(HERE, "comtech_android_update.kt"), encoding="utf-8").read(),
+            "the phone's installer and notification")
+    p.replace(activity, create,
+              "    override fun onNewIntent(intent: Intent) {\n"
+              "        super.onNewIntent(intent)\n"
+              "        comtechOpenInstaller(intent)\n"
+              "    }\n\n"
+              "    // the update notification opens the app with the downloaded APK\n"
+              "    private fun comtechOpenInstaller(intent: Intent?) {\n"
+              '        val path = intent?.getStringExtra("comtech_install_apk") ?: return\n'
+              '        intent.removeExtra("comtech_install_apk")\n'
+              "        comtechInstallApk(this, path)\n"
+              "    }\n\n" + create + "        comtechOpenInstaller(intent)\n",
+              "tapping the update notification starts the install")
+    p.replace(activity, case,
+              '                "comtech_install_apk" -> {\n'
+              '                    comtechInstallApk(this, (call.arguments as Map<*, *>)["path"] as String)\n'
+              "                    result.success(true)\n"
+              "                }\n"
+              '                "comtech_update_notify" -> {\n'
+              "                    val args = call.arguments as Map<*, *>\n"
+              '                    comtechUpdateNotify(this, args["version"] as String, args["path"] as String)\n'
+              "                    result.success(true)\n"
+              "                }\n" + case,
+              "the app can install an update and post its notification")
+    p.replace(manifest, notify,
+              notify + '    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n',
+              "the app may ask to install apps")
+    p.replace(manifest, "    </application>\n",
+              '        <provider\n'
+              '            android:name="androidx.core.content.FileProvider"\n'
+              '            android:authorities="${applicationId}.comtech_update"\n'
+              '            android:exported="false"\n'
+              '            android:grantUriPermissions="true">\n'
+              '            <meta-data\n'
+              '                android:name="android.support.FILE_PROVIDER_PATHS"\n'
+              '                android:resource="@xml/comtech_update_paths" />\n'
+              '        </provider>\n'
+              "    </application>\n",
+              "the installer can read the downloaded APK")
+    p.write("flutter/android/app/src/main/res/xml/comtech_update_paths.xml",
+            '<?xml version="1.0" encoding="utf-8"?>\n<paths>\n    <cache-path name="comtech_update" path="comtech-update/" />\n</paths>\n',
+            "the folder the installer may read")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", default="")
@@ -267,6 +348,7 @@ def main():
     ap.add_argument("--console", action="store_true", help="technician builds open the Comtech console")
     ap.add_argument("--linux-updates", action="store_true", help="installed Linux clients update themselves from our server")
     ap.add_argument("--mac-updates", action="store_true", help="installed Macs update when the console asks")
+    ap.add_argument("--android-updates", action="store_true", help="Android phones download updates and ask to install them")
     a = ap.parse_args()
     if not a.check and not a.key:
         fail("no settings public key")
@@ -377,6 +459,9 @@ def main():
 
     if a.mac_updates:
         mac_updates(p)
+
+    if a.android_updates:
+        android_updates(p)
 
     if a.console:
         # the console package sits beside the app; the home tab shows it when

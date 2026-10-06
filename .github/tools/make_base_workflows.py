@@ -223,13 +223,13 @@ build(
 
 # --- Android: an APK per processor type ---
 build(
-    'generator-android.yml', 'base-android.yml', 'Comtech Android Base Client', '--android --console', 'ubuntu-22.04',
+    'generator-android.yml', 'base-android.yml', 'Comtech Android Base Client', '--android --console --android-updates', 'ubuntu-22.04',
     jobs_keep={'setup', 'generate-bridge-linux', 'build-rustdesk-android', 'deploy', 'cleanup'},
     main_jobs={
         'build-rustdesk-android': (COMMON_DROP | {
             'Embed custom config for Android', 'replace flutter icons', 'icons', 'Sign app APK',
             'Prefer signed APK when available'}, {
-            'allow custom.txt': checkout_patches() + comtech_step('--android --console'),
+            'allow custom.txt': checkout_patches() + comtech_step('--android --console --android-updates'),
         }, {
             # the server signs it with its own key once branded
             'Build rustdesk': upload_step([(f'./signed-apk/rustdesk-{ARCH}.apk', f'{ARCH}.apk')]),

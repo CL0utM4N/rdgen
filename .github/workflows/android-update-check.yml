@@ -1,0 +1,85 @@
+# Comtech fork: checks the Android updater (--android-updates) analyzes and
+# compiles, without building the Rust library or an APK. Needs no secrets.
+name: Comtech Android updater check
+run-name: Comtech Android updater check ${{ inputs.version }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'RustDesk version'
+        required: true
+        default: '1.5.0'
+        type: string
+
+env:
+  ANDROID_FLUTTER_VERSION: "3.24.5"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+    with:
+      version: ${{ inputs.version }}
+
+  check:
+    runs-on: ubuntu-22.04
+    needs: [generate-bridge]
+    steps:
+      - name: Checkout RustDesk
+        uses: actions/checkout@v4
+        with:
+          repository: rustdesk/rustdesk
+          ref: refs/tags/${{ inputs.version }}
+          submodules: recursive
+
+      - name: Checkout the Comtech patches
+        uses: actions/checkout@v4
+        with:
+          path: .comtech
+          sparse-checkout: |
+            .github/patches
+            comtech_console
+
+      - name: Comtech changes
+        run: python3 .comtech/.github/patches/comtech_patch.py --key check --android --console --android-updates
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.ANDROID_FLUTTER_VERSION }}
+
+      - name: Patch flutter
+        continue-on-error: true
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          git apply ${{ github.workspace }}/.comtech/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Get packages
+        working-directory: flutter
+        run: flutter pub get
+
+      - name: Analyze the updater
+        working-directory: flutter
+        run: flutter analyze lib/comtech_update.dart lib/main.dart --no-fatal-infos
+
+      - name: Compile the Android side
+        working-directory: flutter/android
+        run: ./gradlew --no-daemon :app:processDebugManifest :app:compileDebugKotlin
+
+      - name: Check the merged manifest
+        run: |
+          m=$(find flutter/build -path '*merged_manifests*' -name AndroidManifest.xml | head -1)
+          echo "$m"
+          grep -n "REQUEST_INSTALL_PACKAGES\|comtech_update" "$m"
