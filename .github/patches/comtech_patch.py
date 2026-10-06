@@ -4,8 +4,8 @@ Base clients are built once per RustDesk release; the Client Builder then
 brands each customer's installer on the server in seconds. Run from the
 RustDesk source folder:
 
-    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates]
-    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates]
+    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates]
+    python comtech_patch.py --check [--updates] [--packer] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates]
 
 --check only confirms every change still applies to this RustDesk version,
 so a new release that moved the code fails early and clearly.
@@ -230,6 +230,30 @@ def linux_updates(p):
             "the Linux updater")
 
 
+def mac_updates(p):
+    """Installed Macs update when the console asks.
+
+    RustDesk 1.5.0's own Mac updater is switched off: it refuses app names
+    with spaces and puts the name into shell commands without quotes. The
+    root service runs comtech_mac_update.rs instead, which only has an
+    update to install after Update now was pressed.
+    """
+    mac = "src/platform/macos.rs"
+    call = "    crate::updater::start_auto_update_macos();\n"
+    text = open(mac, encoding="utf-8").read() if os.path.isfile(mac) else ""
+    if call not in text:
+        print("skipped: macOS updates need RustDesk 1.5.0 or newer")
+        return
+    p.replace(mac, call, "    crate::comtech_mac_update::start();\n",
+              "the Mac service checks for updates with ours, not RustDesk's")
+    p.replace("src/lib.rs", "mod updater;\n",
+              'mod updater;\n#[cfg(target_os = "macos")]\npub mod comtech_mac_update;\n',
+              "the Mac updater is part of the app")
+    p.write("src/comtech_mac_update.rs",
+            open(os.path.join(HERE, "comtech_mac_update.rs"), encoding="utf-8").read(),
+            "the Mac updater")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", default="")
@@ -242,6 +266,7 @@ def main():
     ap.add_argument("--appimage", action="store_true", help="Linux reads settings attached to its AppImage")
     ap.add_argument("--console", action="store_true", help="technician builds open the Comtech console")
     ap.add_argument("--linux-updates", action="store_true", help="installed Linux clients update themselves from our server")
+    ap.add_argument("--mac-updates", action="store_true", help="installed Macs update when the console asks")
     a = ap.parse_args()
     if not a.check and not a.key:
         fail("no settings public key")
@@ -349,6 +374,9 @@ def main():
 
     if a.linux_updates:
         linux_updates(p)
+
+    if a.mac_updates:
+        mac_updates(p)
 
     if a.console:
         # the console package sits beside the app; the home tab shows it when

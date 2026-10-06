@@ -1,0 +1,110 @@
+# Comtech fork: checks the macOS updater (--mac-updates) compiles, without
+# building or uploading an app. Needs no secrets.
+name: Comtech Mac updater check
+run-name: Comtech Mac updater check ${{ inputs.version }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'RustDesk version'
+        required: true
+        default: '1.5.0'
+        type: string
+
+env:
+  MAC_RUST_VERSION: "1.81"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT_ID: "${{ startsWith(inputs.version, '1.4.') && '120deac3062162151622ca4860575a33844ba10b' || '9e593bb18ea69cc5095e012465dcd675a822ed0d' }}"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+    with:
+      version: ${{ inputs.version }}
+
+  check:
+    runs-on: macos-14
+    needs: [generate-bridge]
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout RustDesk
+        uses: actions/checkout@v4
+        with:
+          repository: rustdesk/rustdesk
+          ref: refs/tags/${{ inputs.version }}
+          submodules: recursive
+
+      - name: Checkout the Comtech patches
+        uses: actions/checkout@v4
+        with:
+          path: .comtech
+          sparse-checkout: |
+            .github/patches
+            comtech_console
+
+      - name: Comtech changes
+        run: python3 .comtech/.github/patches/comtech_patch.py --key check --console --mac-updates
+
+      - name: Install build runtime
+        run: |
+          brew install llvm create-dmg
+          if ! command -v pkg-config &>/dev/null; then
+              brew install pkg-config
+          fi
+
+      - name: Install NASM
+        run: |
+          # NASM 2.16.x; 3.x isn't compatible with the multimedia libraries
+          wget https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip
+          unzip nasm-2.16.03-macosx.zip
+          sudo cp nasm-2.16.03/nasm /usr/local/bin/nasm
+          nasm --version
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.MAC_RUST_VERSION }}
+          targets: aarch64-apple-darwin
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rustdesk-lib-cache-mac-update
+          key: aarch64-apple-darwin
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              cat "$_1"
+            done
+            exit 1
+          fi
+
+      - name: Check
+        run: |
+          set -o pipefail
+          cargo check --locked --lib --target aarch64-apple-darwin --features hwcodec,flutter,unix-file-copy-paste --message-format short 2>&1 | tee check.log
+
+      - name: Errors
+        if: failure()
+        run: grep -E "^(src|libs)/.*error" check.log | head -200 || true

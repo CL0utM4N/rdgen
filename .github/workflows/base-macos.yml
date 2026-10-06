@@ -61,7 +61,7 @@ jobs:
             comtech_console
       - name: Check the Comtech changes apply
         shell: bash
-        run: python3 .comtech/.github/patches/comtech_patch.py --check --console
+        run: python3 .comtech/.github/patches/comtech_patch.py --check --console --mac-updates
 
   setup:
     uses: ./.github/workflows/fetch-encrypted-secrets.yml
@@ -297,7 +297,7 @@ jobs:
         shell: bash
         run: |
           # signed settings only; see .github/patches/comtech_patch.py
-          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --console
+          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --console --mac-updates
           wget -q https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/removeSetupServerTip.diff
           git apply removeSetupServerTip.diff || echo "::warning::set up server tip patch did not apply"
           # the build copies this into the packages; the settings come later

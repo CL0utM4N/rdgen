@@ -197,14 +197,14 @@ build(
 
 # --- macOS: RustDesk.app for Apple silicon and Intel ---
 build(
-    'generator-macos.yml', 'base-macos.yml', 'Comtech macOS Base Client', '--console', 'ubuntu-22.04',
+    'generator-macos.yml', 'base-macos.yml', 'Comtech macOS Base Client', '--console --mac-updates', 'ubuntu-22.04',
     jobs_keep={'setup', 'generate-bridge', 'build-for-macos', 'cleanup'},
     main_jobs={
         'build-for-macos': (COMMON_DROP | {
             'Magick stuff for macOS', 'replace flutter icons', 'ui.rs', 'Embed custom config into the .app bundle',
             'Install rcodesign tool', 'icon svg handling', 'logo handling', 'Sign macOS app bundle',
             'Ad-hoc Sign macOS app bundle (Fallback)', 'Create DMG', 'Rename rustdesk'}, {
-            'allow custom.txt': checkout_patches() + comtech_step('--console'),
+            'allow custom.txt': checkout_patches() + comtech_step('--console --mac-updates'),
         }, {
             # the server brands and signs the app, so it's sent unsigned
             'Build rustdesk': '''      - name: Pack the base app
