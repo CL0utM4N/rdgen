@@ -74,6 +74,10 @@ jobs:
         working-directory: flutter
         run: flutter analyze lib/comtech_update.dart lib/main.dart --no-fatal-infos
 
+      - name: Make the Gradle files
+        working-directory: flutter
+        run: flutter build apk --debug --config-only
+
       - name: Compile the Android side
         working-directory: flutter/android
         run: ./gradlew --no-daemon :app:processDebugManifest :app:compileDebugKotlin
