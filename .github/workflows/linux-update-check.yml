@@ -23,7 +23,7 @@ jobs:
       version: ${{ inputs.version }}
 
   check:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [generate-bridge]
     steps:
       - name: Export GitHub Actions cache environment variables
