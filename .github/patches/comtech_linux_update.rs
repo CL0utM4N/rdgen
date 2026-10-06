@@ -1,6 +1,7 @@
 // Comtech: installed Linux clients update themselves from our server.
 //
-// The root service asks the API every ten minutes whether this client's build
+// Only Client Builder instant builds (the ones with a comtech-build setting)
+// take part. The root service asks the API every ten minutes whether this client's build
 // has been remade from a newer base client. When it has, and nobody is
 // connected, the package is downloaded, checked against the SHA-256 the API
 // gave, and installed by a transient systemd unit: the package scripts stop
@@ -24,7 +25,7 @@ const CHECK_EVERY: Duration = Duration::from_secs(60 * 10);
 const RETRY_AFTER: u64 = 60 * 60 * 6;
 
 pub fn start() {
-    if !crate::platform::is_installed() || !crate::is_custom_client() {
+    if !crate::platform::is_installed() {
         return;
     }
     if std::env::var_os("APPIMAGE").is_some() || std::env::var_os("FLATPAK_ID").is_some() {
@@ -97,13 +98,19 @@ struct Update {
     file: String,
 }
 
-fn ask_server(api: &str, pkg: &str) -> ResultType<Option<Update>> {
-    let build = config::HARD_SETTINGS
+// the Client Builder puts this in its instant builds' settings; they keep
+// the RustDesk name, so it's what tells them from a stock install
+fn build_uuid() -> String {
+    config::HARD_SETTINGS
         .read()
         .unwrap()
         .get("comtech-build")
         .cloned()
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+fn ask_server(api: &str, pkg: &str) -> ResultType<Option<Update>> {
+    let build = build_uuid();
     let url = format!(
         "{}/api/clientgen/linux-update-check?id={}&uuid={}&build={}&version={}&arch={}&pkg={}",
         api,
@@ -308,6 +315,9 @@ fn install(pkg: &str, path: &Path) -> ResultType<()> {
 }
 
 fn check_once() -> ResultType<()> {
+    if build_uuid().is_empty() {
+        return Ok(());
+    }
     let Some(pkg) = package_type() else {
         return Ok(());
     };
