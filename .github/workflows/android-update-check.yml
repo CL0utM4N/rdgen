@@ -86,6 +86,6 @@ jobs:
 
       - name: Check the merged manifest
         run: |
-          m=$(find flutter/build -path '*merged_manifests*' -name AndroidManifest.xml | head -1)
+          m=$(find flutter/build/app -name AndroidManifest.xml -path '*merged_manifest*' | head -1)
           echo "$m"
           grep -n "REQUEST_INSTALL_PACKAGES\|comtech_update" "$m"
