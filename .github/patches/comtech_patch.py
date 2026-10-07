@@ -458,7 +458,7 @@ def check_button(p, windows_updates, linux_updates, mac_updates, phone_updates):
     gate = "if matches!(&data, Data::SyncConfig(_)) {"
     handler = '        #[cfg(target_os = "linux")]\n        Data::TerminalSessionCount(_) => {\n'
     setter = "pub async fn set_data(data: &Data) -> ResultType<()> {\n    set_data_async(data).await\n}\n"
-    ffi_anchor = "pub fn main_change_id(new_id: String) {\n    change_id(new_id)\n}\n"
+    ffi_anchor = "pub fn main_set_option(key: String, value: String) {\n"
     about = ("              InkWell(\n                  onTap: () {\n"
              "                    launchUrlString('https://rustdesk.com/privacy.html');\n")
     tile = ("                  child: Text(_buildDate),\n                ),\n"
@@ -507,22 +507,24 @@ pub async fn comtech_check_update() -> ResultType<()> {
     Ok(())
 }
 ''', "the update button's call to the updating process")
-    p.replace(ffi, ffi_anchor, ffi_anchor + '''
-pub fn main_comtech_check_update() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    std::thread::spawn(|| {
-        if let Err(e) = crate::ipc::comtech_check_update() {
-            log::error!("comtech: update check not started: {}", e);
-        }
-    });
-}
+    # no new bridge function: the bridge is generated from RustDesk's own
+    # source, before these changes, so the button rides on main_set_option
+    p.replace(ffi, ffi_anchor, ffi_anchor + '''    if key == "comtech-check-update" {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        std::thread::spawn(|| {
+            if let Err(e) = crate::ipc::comtech_check_update() {
+                log::error!("comtech: update check not started: {}", e);
+            }
+        });
+        return;
+    }
 ''', "the update button's call into the app")
 
     p.replace(desktop_page, about,
               "              if (bind.mainGetHardOption(key: 'comtech-build').isNotEmpty)\n"
               "                OutlinedButton(\n"
               "                  onPressed: () {\n"
-              "                    bind.mainComtechCheckUpdate();\n"
+              "                    bind.mainSetOption(key: 'comtech-check-update', value: 'Y');\n"
               "                    showToast('Checking for updates…');\n"
               "                  },\n"
               "                  child: const Text('Check for updates'),\n"
