@@ -49,7 +49,7 @@ jobs:
             comtech_console
 
       - name: Comtech changes
-        run: python3 .comtech/.github/patches/comtech_patch.py --key check --console --mac-updates
+        run: python3 .comtech/.github/patches/comtech_patch.py --key check --console --mac-updates --check-button
 
       - name: Install build runtime
         run: |

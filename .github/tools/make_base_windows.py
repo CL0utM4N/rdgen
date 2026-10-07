@@ -53,7 +53,7 @@ trust_key = '''      - name: Checkout the Comtech patches
         run: |
           # signed settings only, updates from our server, and an installer
           # the Client Builder can brand; see .github/patches/comtech_patch.py
-          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --updates --packer --console
+          python3 .comtech/.github/patches/comtech_patch.py --key "$settingsPubKey" --updates --packer --console --check-button
 
       - name: Remove the set up server tip
         continue-on-error: true
@@ -132,7 +132,7 @@ check_job = """  check-patches:
             comtech_console
       - name: Check the Comtech changes apply
         shell: bash
-        run: python3 .comtech/.github/patches/comtech_patch.py --check --updates --packer --console
+        run: python3 .comtech/.github/patches/comtech_patch.py --check --updates --packer --console --check-button
       - name: Compile check the packer
         shell: bash
         run: |

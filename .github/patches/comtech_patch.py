@@ -4,8 +4,8 @@ Base clients are built once per RustDesk release; the Client Builder then
 brands each customer's installer on the server in seconds. Run from the
 RustDesk source folder:
 
-    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--bitlocker] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates]
-    python comtech_patch.py --check [--updates] [--packer] [--bitlocker] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates]
+    python comtech_patch.py --key <settings public key> [--updates] [--packer] [--bitlocker] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates] [--check-button]
+    python comtech_patch.py --check [--updates] [--packer] [--bitlocker] [--android] [--ios] [--ios-share] [--console] [--linux-updates] [--mac-updates] [--android-updates] [--ios-updates] [--check-button]
 
 --check only confirms every change still applies to this RustDesk version,
 so a new release that moved the code fails early and clearly.
@@ -438,6 +438,111 @@ def bitlocker(p):
               "the console can ask for a BitLocker report")
 
 
+def check_button(p, windows_updates, linux_updates, mac_updates, phone_updates):
+    """A Check for updates button on the About page (desktop) and in the
+    About list (phones), shown for builds from our Client Builder.
+
+    Desktop: the UI is not the process that updates, so the button reaches
+    the one that does over IPC. Windows: the --server, which also takes the
+    console's Update now, runs RustDesk's updater. Linux and macOS: the
+    root service runs ours, so the message goes to its protected _service
+    channel, which is let take this one message besides SyncConfig. Phones
+    update inside the app: the button runs a round at once.
+    """
+    ipc = "src/ipc.rs"
+    ffi = "src/flutter_ffi.rs"
+    desktop_page = "flutter/lib/desktop/pages/desktop_setting_page.dart"
+    mobile_page = "flutter/lib/mobile/pages/settings_page.dart"
+    variant = ('    #[cfg(not(any(target_os = "android", target_os = "ios")))]\n'
+               '    Whiteboard((String, crate::whiteboard::CustomEvent)),\n')
+    gate = "if matches!(&data, Data::SyncConfig(_)) {"
+    handler = '        #[cfg(target_os = "linux")]\n        Data::TerminalSessionCount(_) => {\n'
+    setter = "pub async fn set_data(data: &Data) -> ResultType<()> {\n    set_data_async(data).await\n}\n"
+    ffi_anchor = "pub fn main_change_id(new_id: String) {\n    change_id(new_id)\n}\n"
+    about = ("              InkWell(\n                  onTap: () {\n"
+             "                    launchUrlString('https://rustdesk.com/privacy.html');\n")
+    tile = ("                  child: Text(_buildDate),\n                ),\n"
+            "                leading: Icon(Icons.query_builder)),\n")
+    imp = "import 'package:flutter_hbb/common/widgets/setting_widgets.dart';\n"
+
+    def has(path, text):
+        return os.path.isfile(path) and text in open(path, encoding="utf-8").read()
+
+    # HasNoActiveConns (1.5.0) tells the version the Linux and Mac updaters need
+    anchors = [(ipc, "HasNoActiveConns(Option<bool>),"), (ipc, variant), (ipc, gate), (ipc, handler), (ipc, setter), (ffi, ffi_anchor), (desktop_page, about)]
+    if phone_updates:
+        anchors += [(mobile_page, tile), (mobile_page, imp)]
+    if not all(has(*a) for a in anchors):
+        print("skipped: the update button needs RustDesk 1.5.0 or newer")
+        return
+
+    p.replace(ipc, variant,
+              '    #[cfg(not(any(target_os = "android", target_os = "ios")))]\n    ComtechCheckUpdate,\n' + variant,
+              "the update button can ask the updating process to check (message)")
+    p.replace(ipc, gate, "if matches!(&data, Data::SyncConfig(_) | Data::ComtechCheckUpdate) {",
+              "the update button can reach the Linux and Mac service")
+    arms = ""
+    if windows_updates:
+        arms += '            #[cfg(target_os = "windows")]\n            crate::updater::manually_check_update().ok();\n'
+    if linux_updates:
+        arms += '            #[cfg(target_os = "linux")]\n            crate::comtech_linux_update::check_now();\n'
+    if mac_updates:
+        arms += '            #[cfg(target_os = "macos")]\n            crate::comtech_mac_update::check_now();\n'
+    p.replace(ipc, handler,
+              '        #[cfg(not(any(target_os = "android", target_os = "ios")))]\n'
+              '        Data::ComtechCheckUpdate => {\n' + arms + '        }\n' + handler,
+              "the update button can ask the updating process to check (answer)")
+    p.replace(ipc, setter,
+              setter + '''
+// The Check for updates button. Windows: the --server runs the updater.
+// Linux and macOS: the root service does, through its _service channel.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tokio::main(flavor = "current_thread")]
+pub async fn comtech_check_update() -> ResultType<()> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let mut c = connect_service(1000).await?;
+    #[cfg(windows)]
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::ComtechCheckUpdate).await?;
+    Ok(())
+}
+''', "the update button's call to the updating process")
+    p.replace(ffi, ffi_anchor, ffi_anchor + '''
+pub fn main_comtech_check_update() {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    std::thread::spawn(|| {
+        if let Err(e) = crate::ipc::comtech_check_update() {
+            log::error!("comtech: update check not started: {}", e);
+        }
+    });
+}
+''', "the update button's call into the app")
+
+    p.replace(desktop_page, about,
+              "              if (bind.mainGetHardOption(key: 'comtech-build').isNotEmpty)\n"
+              "                OutlinedButton(\n"
+              "                  onPressed: () {\n"
+              "                    bind.mainComtechCheckUpdate();\n"
+              "                    showToast('Checking for updates…');\n"
+              "                  },\n"
+              "                  child: const Text('Check for updates'),\n"
+              "                ).marginSymmetric(vertical: 4.0),\n" + about,
+              "the About page has a Check for updates button")
+    if phone_updates:
+        p.replace(mobile_page, imp, imp + "import 'package:flutter_hbb/comtech_update.dart';\n",
+                  "the phone settings can check for updates")
+        p.replace(mobile_page, tile,
+                  tile + "            if (bind.mainGetHardOption(key: 'comtech-build').isNotEmpty)\n"
+                  "              SettingsTile(\n"
+                  "                  onPressed: (context) {\n"
+                  "                    comtechCheckNow();\n"
+                  "                    showToast('Checking for updates…');\n"
+                  "                  },\n"
+                  "                  title: Text('Check for updates'),\n"
+                  "                  leading: Icon(Icons.system_update)),\n",
+                  "the About list has a Check for updates button")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", default="")
@@ -454,6 +559,7 @@ def main():
     ap.add_argument("--mac-updates", action="store_true", help="installed Macs update when the console asks")
     ap.add_argument("--android-updates", action="store_true", help="Android phones download updates and ask to install them")
     ap.add_argument("--ios-updates", action="store_true", help="iPhones download updates into Files for AltStore or SideStore")
+    ap.add_argument("--check-button", action="store_true", help="a Check for updates button on the About page")
     a = ap.parse_args()
     if not a.check and not a.key:
         fail("no settings public key")
@@ -573,6 +679,9 @@ def main():
 
     if a.ios_updates:
         ios_updates(p)
+
+    if a.check_button:
+        check_button(p, a.updates, a.linux_updates, a.mac_updates, a.android_updates or a.ios_updates)
 
     if a.console:
         # the console package sits beside the app; the home tab shows it when

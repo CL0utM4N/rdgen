@@ -14,6 +14,7 @@ use std::{
     os::unix::fs::{DirBuilderExt, OpenOptionsExt},
     path::{Path, PathBuf},
     process::Command,
+    sync::atomic::{AtomicBool, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -40,7 +41,7 @@ pub fn start() {
         .spawn(|| {
             std::thread::sleep(FIRST_CHECK);
             loop {
-                if let Err(e) = check_once() {
+                if let Err(e) = check_guarded() {
                     log::error!("comtech-update: {}", e);
                 }
                 std::thread::sleep(CHECK_EVERY);
@@ -312,6 +313,44 @@ fn install(pkg: &str, path: &Path) -> ResultType<()> {
     }
     log::info!("comtech-update: installing through {}", unit);
     Ok(())
+}
+
+// a scheduled check and one asked for by the Check for updates button must
+// not run at once: the second finds the first still going and leaves it be
+static CHECKING: AtomicBool = AtomicBool::new(false);
+
+struct CheckGuard;
+
+impl Drop for CheckGuard {
+    fn drop(&mut self) {
+        CHECKING.store(false, Ordering::SeqCst);
+    }
+}
+
+fn check_guarded() -> ResultType<()> {
+    if CHECKING.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let _guard = CheckGuard;
+    check_once()
+}
+
+// The Check for updates button: one check now, off the IPC thread. Only the
+// root service installs updates, so a user's --server ignores the request.
+pub fn check_now() {
+    if unsafe { hbb_common::libc::geteuid() } != 0 {
+        return;
+    }
+    let spawned = std::thread::Builder::new()
+        .name("comtech-update-now".to_owned())
+        .spawn(|| {
+            if let Err(e) = check_guarded() {
+                log::error!("comtech-update: {}", e);
+            }
+        });
+    if let Err(e) = spawned {
+        log::error!("comtech-update: check not started: {}", e);
+    }
 }
 
 fn check_once() -> ResultType<()> {

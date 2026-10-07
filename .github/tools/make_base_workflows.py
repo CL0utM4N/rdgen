@@ -171,11 +171,11 @@ _, ljobs = split_jobs(src)
 build_step = [s for s in split_steps(dict(ljobs)['build-rustdesk-linux'])[1] if step_name(s) == 'Build rustdesk'][0]
 assert placeholder_src in build_step, 'Linux build step changed; update the placeholder'
 build(
-    'generator-linux.yml', 'base-linux.yml', 'Comtech Linux Base Client', '--appimage --console --linux-updates', 'ubuntu-22.04',
+    'generator-linux.yml', 'base-linux.yml', 'Comtech Linux Base Client', '--appimage --console --linux-updates --check-button', 'ubuntu-22.04',
     jobs_keep={'setup', 'generate-bridge-linux', 'build-rustdesk-linux', 'build-appimage', 'cleanup'},
     main_jobs={
         'build-rustdesk-linux': (COMMON_DROP, {
-            'allow custom.txt': checkout_patches() + comtech_step('--appimage --console --linux-updates'),
+            'allow custom.txt': checkout_patches() + comtech_step('--appimage --console --linux-updates --check-button'),
             'Build rustdesk': build_step.replace(placeholder_src, placeholder_new),
         }, {
             'Rename archlinux package': upload_step([
@@ -197,14 +197,14 @@ build(
 
 # --- macOS: RustDesk.app for Apple silicon and Intel ---
 build(
-    'generator-macos.yml', 'base-macos.yml', 'Comtech macOS Base Client', '--console --mac-updates', 'ubuntu-22.04',
+    'generator-macos.yml', 'base-macos.yml', 'Comtech macOS Base Client', '--console --mac-updates --check-button', 'ubuntu-22.04',
     jobs_keep={'setup', 'generate-bridge', 'build-for-macos', 'cleanup'},
     main_jobs={
         'build-for-macos': (COMMON_DROP | {
             'Magick stuff for macOS', 'replace flutter icons', 'ui.rs', 'Embed custom config into the .app bundle',
             'Install rcodesign tool', 'icon svg handling', 'logo handling', 'Sign macOS app bundle',
             'Ad-hoc Sign macOS app bundle (Fallback)', 'Create DMG', 'Rename rustdesk'}, {
-            'allow custom.txt': checkout_patches() + comtech_step('--console --mac-updates'),
+            'allow custom.txt': checkout_patches() + comtech_step('--console --mac-updates --check-button'),
         }, {
             # the server brands and signs the app, so it's sent unsigned
             'Build rustdesk': '''      - name: Pack the base app
@@ -223,13 +223,13 @@ build(
 
 # --- Android: an APK per processor type ---
 build(
-    'generator-android.yml', 'base-android.yml', 'Comtech Android Base Client', '--android --console --android-updates', 'ubuntu-22.04',
+    'generator-android.yml', 'base-android.yml', 'Comtech Android Base Client', '--android --console --android-updates --check-button', 'ubuntu-22.04',
     jobs_keep={'setup', 'generate-bridge-linux', 'build-rustdesk-android', 'deploy', 'cleanup'},
     main_jobs={
         'build-rustdesk-android': (COMMON_DROP | {
             'Embed custom config for Android', 'replace flutter icons', 'icons', 'Sign app APK',
             'Prefer signed APK when available'}, {
-            'allow custom.txt': checkout_patches() + comtech_step('--android --console --android-updates'),
+            'allow custom.txt': checkout_patches() + comtech_step('--android --console --android-updates --check-button'),
         }, {
             # the server signs it with its own key once branded
             'Build rustdesk': upload_step([(f'./signed-apk/rustdesk-{ARCH}.apk', f'{ARCH}.apk')]),

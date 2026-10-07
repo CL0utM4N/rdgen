@@ -57,7 +57,7 @@ jobs:
             comtech_console
 
       - name: Comtech changes
-        run: python3 .comtech/.github/patches/comtech_patch.py --key "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=" --ios --ios-share --console --ios-updates
+        run: python3 .comtech/.github/patches/comtech_patch.py --key "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=" --ios --ios-share --console --ios-updates --check-button
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@v11

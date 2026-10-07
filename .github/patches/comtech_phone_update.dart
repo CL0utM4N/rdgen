@@ -67,6 +67,11 @@ void comtechStartUpdates() {
   });
 }
 
+// The Check for updates button: a round now. A press during a round does nothing.
+void comtechCheckNow() {
+  _comtechUpdateRound();
+}
+
 Future<void> _comtechUpdateRound() async {
   if (_comtechUpdateBusy) return;
   _comtechUpdateBusy = true;
