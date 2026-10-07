@@ -488,7 +488,7 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
             Col(T('AppName'), prop: 'app_name'),
             Col(T('Platform'), prop: 'platform', width: 110),
             Col(T('Version'), prop: 'version', width: 90),
-            Col(T('DeviceGroup'), cell: (r, _) => asInt(r['device_group_id']) > 0 ? CtTag(nameOf(groups, r['device_group_id'])) : const SizedBox()),
+            Col(T('DeviceGroup'), minWidth: 170, cell: (r, _) => asInt(r['device_group_id']) > 0 ? CtTag(nameOf(groups, r['device_group_id'])) : const SizedBox()),
             Col(T('Note'), prop: 'note'),
             Col(T('Status'),
                 width: 160,
@@ -501,7 +501,7 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
                         ),
                     ])),
             Col(T('Installers'),
-                minWidth: 220,
+                minWidth: 340,
                 cell: (r, _) => Column(mainAxisSize: MainAxisSize.min, children: [
                       for (final f in files(r))
                         Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, children: [
