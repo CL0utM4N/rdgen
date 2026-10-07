@@ -181,6 +181,18 @@ class _SecurityPageState extends State<SecurityPage> {
     if (mounted) setState(() => savingBitlocker = false);
   }
 
+  Future<void> _setBitlockerTechnician(bool on) async {
+    setState(() => savingBitlocker = true);
+    try {
+      final d = await api.post('/bitlocker/settings', body: {'technician': on});
+      bitlocker = Map<String, dynamic>.from(d as Map);
+      Toasts.success(T('OperationSuccess'));
+    } catch (_) {
+      await _loadBitlocker();
+    }
+    if (mounted) setState(() => savingBitlocker = false);
+  }
+
   Future<void> _load() async {
     setState(() => loading = true);
     try {
@@ -291,6 +303,20 @@ class _SecurityPageState extends State<SecurityPage> {
                       loading: savingBitlocker,
                       // turning it off is always allowed; turning it on needs a data key
                       onChanged: canSettings && (bitlocker!['data_key'] == true || bitlocker!['enabled'] == true) ? _setBitlocker : null,
+                    ),
+                  ),
+                ),
+                FormItem(
+                  label: T('BitlockerTechnician'),
+                  labelWidth: 260,
+                  help: T('BitlockerTechnicianHelp'),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: CtSwitch(
+                      value: bitlocker!['technician'] == true,
+                      loading: savingBitlocker,
+                      // needs the master switch on and a data key
+                      onChanged: canSettings && bitlocker!['enabled'] == true && bitlocker!['data_key'] == true ? _setBitlockerTechnician : null,
                     ),
                   ),
                 ),

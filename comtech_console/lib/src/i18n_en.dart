@@ -785,4 +785,6 @@ const Map<String, List<String>> kEnglish = {
   'BitlockerCollect': ['Collect BitLocker recovery keys from Windows devices'],
   'BitlockerCollectHelp': ['The master switch. Only devices installed from builds with BitLocker key collection on report their keys; turning this off stops all collection. Saved straight away.'],
   'BitlockerNoDataKey': ['BitLocker key escrow needs a data key: set one on the server first (keys are never stored in plain text).'],
+  'BitlockerTechnician': ['Also collect BitLocker recovery keys from technician (admin) machines'],
+  'BitlockerTechnicianHelp': ['Turns key collection on for every Comtech Remote Admin build and keeps it on when the app is remade. Needs the switch above. Saved straight away.'],
 };
