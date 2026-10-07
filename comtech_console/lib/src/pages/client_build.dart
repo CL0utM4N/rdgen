@@ -501,14 +501,15 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
                         ),
                     ])),
             Col(T('Installers'),
-                minWidth: 340,
-                cell: (r, _) => Column(mainAxisSize: MainAxisSize.min, children: [
-                      for (final f in files(r))
-                        Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, children: [
-                          CtButton(f, link: true, tone: Tone.primary, onPressed: () => openUrl(downloadUrl(r, f))),
-                          CtButton(T('CopyLink'), link: true, size: BtnSize.small, onPressed: () => copyText(downloadUrl(r, f))),
-                        ]),
-                    ])),
+                minWidth: 150,
+                cell: (r, _) {
+                  final fs = files(r);
+                  if (fs.isEmpty) return const Text('-');
+                  return CtMenuButton(
+                    button: CtButton(T('Download'), size: BtnSize.table, trailingIcon: Icons.keyboard_arrow_down, onPressed: () {}),
+                    actions: [for (final f in fs) MenuAction(f, () => openUrl(downloadUrl(r, f)))],
+                  );
+                }),
             Col(T('BitlockerColumn'),
                 width: 110,
                 cell: (r, _) => isWindows(r['platform']) && '${r['kind'] ?? ''}'.isEmpty
