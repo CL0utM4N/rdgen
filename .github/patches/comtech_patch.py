@@ -521,7 +521,7 @@ pub async fn comtech_check_update() -> ResultType<()> {
 ''', "the update button's call into the app")
 
     p.replace(desktop_page, about,
-              "              if (bind.mainGetHardOption(key: 'comtech-build').isNotEmpty)\n"
+              "              if (!isWeb)\n"
               "                OutlinedButton(\n"
               "                  onPressed: () {\n"
               "                    bind.mainSetOption(key: 'comtech-check-update', value: 'Y');\n"
@@ -534,7 +534,7 @@ pub async fn comtech_check_update() -> ResultType<()> {
         p.replace(mobile_page, imp, imp + "import 'package:flutter_hbb/comtech_update.dart';\n",
                   "the phone settings can check for updates")
         p.replace(mobile_page, tile,
-                  tile + "            if (bind.mainGetHardOption(key: 'comtech-build').isNotEmpty)\n"
+                  tile + "            if (!isWeb)\n"
                   "              SettingsTile(\n"
                   "                  onPressed: (context) {\n"
                   "                    comtechCheckNow();\n"
