@@ -459,8 +459,9 @@ def check_button(p, windows_updates, linux_updates, mac_updates, phone_updates):
     handler = '        #[cfg(target_os = "linux")]\n        Data::TerminalSessionCount(_) => {\n'
     setter = "pub async fn set_data(data: &Data) -> ResultType<()> {\n    set_data_async(data).await\n}\n"
     ffi_anchor = "pub fn main_set_option(key: String, value: String) {\n"
-    about = ("              InkWell(\n                  onTap: () {\n"
-             "                    launchUrlString('https://rustdesk.com/privacy.html');\n")
+    # the ID line: the base build rewrites the privacy URL below it, so don't anchor there
+    about = ("                  child: Text('${translate('ID')}: $myId')\n"
+             "                      .marginSymmetric(vertical: 4.0)),\n")
     tile = ("                  child: Text(_buildDate),\n                ),\n"
             "                leading: Icon(Icons.query_builder)),\n")
     imp = "import 'package:flutter_hbb/common/widgets/setting_widgets.dart';\n"
@@ -521,14 +522,14 @@ pub async fn comtech_check_update() -> ResultType<()> {
 ''', "the update button's call into the app")
 
     p.replace(desktop_page, about,
-              "              if (!isWeb)\n"
+              about + "              if (!isWeb)\n"
               "                OutlinedButton(\n"
               "                  onPressed: () {\n"
               "                    bind.mainSetOption(key: 'comtech-check-update', value: 'Y');\n"
               "                    showToast('Checking for updates…');\n"
               "                  },\n"
               "                  child: const Text('Check for updates'),\n"
-              "                ).marginSymmetric(vertical: 4.0),\n" + about,
+              "                ).marginSymmetric(vertical: 4.0),\n",
               "the About page has a Check for updates button")
     if phone_updates:
         p.replace(mobile_page, imp, imp + "import 'package:flutter_hbb/comtech_update.dart';\n",
