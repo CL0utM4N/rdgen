@@ -30,6 +30,22 @@ const buildPermissions = [
   'enable_recording', 'enable_blocking_input', 'enable_remote_modi', 'enable_printer', 'enable_camera', 'enable_terminal',
 ];
 
+/// The options a build preset stores and applies. Keep in step with
+/// presetFields in the server's service/buildPreset.go.
+const _presetKeys = [
+  'app_name', 'company_name', 'note',
+  'direction', 'password_approve_mode',
+  'permissions_override', 'permissions_type',
+  'enable_keyboard', 'enable_clipboard', 'enable_file_transfer', 'enable_audio', 'enable_tcp',
+  'enable_remote_restart', 'enable_recording', 'enable_blocking_input', 'enable_remote_modi',
+  'enable_printer', 'enable_camera', 'enable_terminal',
+  'disable_installation', 'disable_settings', 'deny_lan', 'enable_direct_ip', 'auto_close',
+  'hide_cm', 'remove_wallpaper', 'remove_new_version_notif',
+  'theme', 'theme_override', 'android_app_id',
+  'default_manual', 'override_manual',
+  'icon', 'logo', 'privacy',
+];
+
 class ClientBuildPage extends StatefulWidget {
   const ClientBuildPage({super.key});
 
@@ -197,6 +213,17 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
     final f = _defaults();
     var tab = 'general';
     var submitting = false;
+    int? presetId;
+    var presets = <Row_>[];
+    Future<void> loadPresets() async {
+      try {
+        final d = await api.get('/build_preset/list', quiet: true);
+        presets = rowsOf(d['list']);
+      } catch (_) {}
+    }
+
+    await loadPresets();
+    if (!mounted) return;
     Row_? caps() => basePlatforms.where((p) => p['key'] == f['platform']).firstOrNull;
     bool instant() => f['instant'] == true && caps()?['ready'] == true;
 
@@ -402,7 +429,62 @@ class _ClientBuildPageState extends State<ClientBuildPage> {
           item(T('OverrideSettings'), CtInput(value: '${f['override_manual']}', rows: 4, placeholder: 'key=value', onChanged: (v) => f['override_manual'] = v)),
         ];
         final tabs = {'general': general, 'server': server, 'visual': visual, 'security': security, 'permissions': permissions, 'advanced': advanced};
+        Row_? selectedPreset() => presets.where((p) => asInt(p['id']) == presetId).firstOrNull;
+        Future<void> savePreset() async {
+          final name = (await prompt(ctx, T('PresetName'), title: T('SaveAsPreset')))?.trim() ?? '';
+          if (name.isEmpty) return;
+          try {
+            await api.post('/build_preset/create', body: {
+              'name': name,
+              'options': {for (final k in _presetKeys) k: f[k]},
+            });
+            await loadPresets();
+            presetId = null;
+            Toasts.success(T('PresetSaved'));
+            set(() {});
+          } catch (_) {}
+        }
+
+        Future<void> deletePreset() async {
+          final sel = selectedPreset();
+          if (sel == null || !await confirm(ctx, T('DeletePresetConfirm', {'name': '${sel['name']}'}))) return;
+          try {
+            await api.post('/build_preset/delete', body: {'id': sel['id']});
+            await loadPresets();
+            presetId = null;
+            Toasts.success(T('PresetDeleted'));
+            set(() {});
+          } catch (_) {}
+        }
+
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(children: [
+              Text(T('Preset')),
+              const SizedBox(width: 12),
+              CtSelect<int>(
+                width: 260,
+                value: presetId,
+                clearable: true,
+                placeholder: T('NonePreset'),
+                options: [for (final p in presets) Opt(asInt(p['id']), '${p['name']}')],
+                onChanged: (v) => set(() {
+                  presetId = v;
+                  final o = selectedPreset()?['options'];
+                  if (o is Map) {
+                    for (final k in _presetKeys) {
+                      if (o.containsKey(k)) f[k] = o[k];
+                    }
+                  }
+                }),
+              ),
+              const SizedBox(width: 8),
+              CtButton(T('DeletePreset'), onPressed: presetId == null ? null : deletePreset),
+              const Spacer(),
+              CtButton(T('SaveAsPreset'), onPressed: savePreset),
+            ]),
+          ),
           CtTabs<String>(
             value: tab,
             tabs: [
