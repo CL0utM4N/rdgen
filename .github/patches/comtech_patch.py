@@ -82,7 +82,7 @@ def quote_app_name(p):
     """
     win = "src/platform/windows.rs"
     p.sub(win, r"sc (create|start|stop|delete) \{app_name\}", r'sc \1 \\"{app_name}\\"',
-          "the service is created under the app's full name", 13)
+          "the service is created under the app's full name", 11)  # 1.5.3 merged two stop/delete pairs
     p.replace(win, 'format!("sc start {}", &app_name)', 'format!("sc start \\"{}\\"", &app_name)',
               "an update restarts the service by its full name")
     p.sub(win, r"taskkill /F /IM \{app_name\}\.exe", r'taskkill /F /IM \\"{app_name}.exe\\"',
@@ -469,6 +469,12 @@ def check_button(p, windows_updates, linux_updates, mac_updates, phone_updates):
     def has(path, text):
         return os.path.isfile(path) and text in open(path, encoding="utf-8").read()
 
+    # 1.5.3 made main_set_option return a Result
+    ffi_return = "return;"
+    ffi_153 = "pub fn main_set_option(key: String, value: String) -> hbb_common::anyhow::Result<()> {\n"
+    if has(ffi, ffi_153):
+        ffi_anchor, ffi_return = ffi_153, "return Ok(());"
+
     # HasNoActiveConns (1.5.0) tells the version the Linux and Mac updaters need
     anchors = [(ipc, "HasNoActiveConns(Option<bool>),"), (ipc, variant), (ipc, gate), (ipc, handler), (ipc, setter), (ffi, ffi_anchor), (desktop_page, about)]
     if phone_updates:
@@ -517,9 +523,9 @@ pub async fn comtech_check_update() -> ResultType<()> {
                 log::error!("comtech: update check not started: {}", e);
             }
         });
-        return;
+        RETURN
     }
-''', "the update button's call into the app")
+'''.replace("RETURN", ffi_return), "the update button's call into the app")
 
     p.replace(desktop_page, about,
               about + "              if (!isWeb)\n"
