@@ -222,6 +222,8 @@ jobs:
           sed -i -e 's|sc delete {app_name}|sc delete \\\"{app_name}\\\"|g' ./src/platform/windows.rs
           sed -i -e 's|format!("sc start {}", \&app_name)|format!("sc start \\\"{}\\\"", \&app_name)|' ./src/platform/windows.rs
           sed -i -e 's|taskkill /F /IM {app_name}.exe|taskkill /F /IM \\\"{app_name}.exe\\\"|g' ./src/platform/windows.rs
+          # 1.5.3 checks the name in platform/mod.rs; with the commands quoted, spaces are safe
+          [ -f ./src/platform/mod.rs ] && sed -i -e "s/|| byte == b'_')$/|| byte == b'_' || byte == b' ')/" ./src/platform/mod.rs
           
       - name: change company name
         if: env.compname != 'Purslane Ltd'

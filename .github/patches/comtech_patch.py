@@ -102,6 +102,21 @@ def quote_app_name(p):
     if check in open(win, encoding="utf-8").read():
         p.replace(win, check, "character.is_ascii_alphanumeric() || character == '-' || character == ' ')",
                   "app names with spaces can be installed")
+    # 1.5.3 moved the check to platform/mod.rs (Windows and macOS). Let
+    # spaces through on Windows only, not at the end; macOS's update script
+    # still uses the name unquoted, and our Mac updater doesn't go that way
+    mod = "src/platform/mod.rs"
+    check153 = "        || !bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')\n"
+    if os.path.isfile(mod) and check153 in open(mod, encoding="utf-8").read():
+        p.replace(mod, check153,
+                  "        || !bytes.all(|byte| {\n"
+                  "            byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_' || (cfg!(windows) && byte == b' ')\n"
+                  "        })\n"
+                  "        || app_name.ends_with(' ')\n",
+                  "app names with spaces can be installed (1.5.3)")
+        test = '"Rust.Desk", "Rust Desk", '
+        if test in open(mod, encoding="utf-8").read():
+            p.replace(mod, test, '"Rust.Desk", ', "the name check's test allows spaces")
 
 
 def ios_share(p):
