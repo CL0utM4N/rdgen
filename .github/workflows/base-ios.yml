@@ -58,7 +58,7 @@ jobs:
 
   build-rustdesk-ios:
     name: build rustdesk ios ipa
-    runs-on: macos-14
+    runs-on: macos-15
     needs: [generate-bridge, setup, check-patches]
     steps:
       - name: Checkout Repository

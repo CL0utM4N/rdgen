@@ -23,7 +23,7 @@ jobs:
       version: ${{ inputs.version }}
 
   check:
-    runs-on: macos-14
+    runs-on: macos-15
     needs: [generate-bridge]
     steps:
       - name: Export GitHub Actions cache environment variables
