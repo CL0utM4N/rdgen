@@ -183,6 +183,18 @@ def ios_share(p):
               "        log::info!(\"comtech: login refused: {}\", err.to_string());\n",
               "iOS logs refused logins")
     p.append("src/platform/mod.rs", "comtech_ios_platform.rs", "iOS platform basics for the server")
+    # 1.5.3: the connection manager cleans up Android document transfers on
+    # disconnect, and privacy mode closes other connections; neither exists
+    # on iOS, so leave them out there
+    cm, cleanup = "src/ui_cm_interface.rs", "    cm.remove_connection(current_id, true);\n    for job in &mut write_jobs {\n        if let Err(error) = job.cancel_document().await {\n"
+    if cleanup in open(cm, encoding="utf-8").read():
+        p.replace(cm, cleanup, cleanup.replace("    for job", '    #[cfg(target_os = "android")]\n    for job', 1),
+                  "iOS has no Android document transfers to clean up")
+    pm = "src/privacy_mode.rs"
+    close = '#[cfg(not(target_os = "ios"))]\npub(crate) fn close_other_remote_connections_for_privacy(owner_id: i32) {\n'
+    if close in open(pm, encoding="utf-8").read():
+        p.replace(pm, close, '#[cfg(target_os = "ios")]\npub(crate) fn close_other_remote_connections_for_privacy(_owner_id: i32) {}\n\n' + close,
+                  "iOS has no privacy mode connections to close")
 
     scrap = "libs/scrap/src/common/"
     p.replace(scrap + "mod.rs",
