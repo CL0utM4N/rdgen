@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -53,6 +54,56 @@ class Api {
 
   Future<dynamic> post(String path, {Object? body, bool quiet = false, Duration? timeout}) =>
       _send(() => _client.post(uri(path), headers: _headers, body: jsonEncode(body ?? {})), quiet, timeout);
+
+  /// A multipart form POST: plain [fields] and [files] (several per field
+  /// name allowed), answered like [post].
+  Future<dynamic> postMultipart(
+    String path, {
+    Map<String, String> fields = const {},
+    Map<String, List<(String, Uint8List)>> files = const {},
+    bool quiet = false,
+    Duration? timeout,
+  }) =>
+      _send(() async {
+        final req = http.MultipartRequest('POST', uri(path))
+          ..headers.addAll({
+            'Accept-Language': 'en',
+            if (token != null && token!.isNotEmpty) 'api-token': token!,
+          })
+          ..fields.addAll(fields);
+        files.forEach((field, list) {
+          for (final f in list) {
+            req.files.add(http.MultipartFile.fromBytes(field, f.$2, filename: f.$1));
+          }
+        });
+        return http.Response.fromStream(await _client.send(req));
+      }, quiet, timeout ?? const Duration(seconds: 60));
+
+  /// An authenticated GET of a file. A problem comes back as the usual JSON
+  /// error instead of the file, which is thrown (and shown unless [quiet]).
+  Future<Uint8List> getBytes(String path, {bool quiet = false, Duration? timeout}) async {
+    http.Response res;
+    try {
+      res = await _client.get(uri(path), headers: _headers).timeout(timeout ?? const Duration(seconds: 50));
+    } on TimeoutException {
+      return _fail(ApiError(-1, 'Connection Time Out!'), quiet);
+    } catch (e) {
+      return _fail(ApiError(-1, 'Can\'t reach the server: $e'), quiet);
+    }
+    final type = res.headers['content-type'] ?? '';
+    if (type.contains('json')) {
+      try {
+        final body = jsonDecode(utf8.decode(res.bodyBytes));
+        if (body is Map) {
+          final code = (body['code'] as num?)?.toInt();
+          if (code != null && code != 0) return _fail(ApiError(code, '${body['message'] ?? 'error'}'), quiet);
+          if (code == null && body['error'] != null) return _fail(ApiError(res.statusCode, '${body['error']}'), quiet);
+        }
+      } catch (_) {}
+    }
+    if (res.statusCode != 200) return _fail(ApiError(res.statusCode, 'HTTP ${res.statusCode}'), quiet);
+    return res.bodyBytes;
+  }
 
   /// Fetches a file from the server outside the API, such as the API reference.
   Future<String> fetchText(String url) async {

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../console.dart';
 import '../i18n.dart';
+import '../save.dart';
 import '../theme.dart';
 import '../util.dart';
 import '../widgets/basic.dart';
@@ -718,6 +719,275 @@ class _BaseCardState extends State<BaseCard> {
     );
   }
 
+  String _day(dynamic t) {
+    final v = '${t ?? ''}';
+    return v.length > 10 ? v.substring(0, 10) : v;
+  }
+
+  /// A file chooser: a button and the name of what was picked.
+  Widget _picker(String? name, VoidCallback onPick) => Row(children: [
+        CtButton(T('ChooseFile'), size: BtnSize.small, onPressed: onPick),
+        const SizedBox(width: 10),
+        if (name != null && name.isNotEmpty) Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
+      ]);
+
+  /// The certificate and profiles iOS builds are signed with.
+  Future<void> _ios() async {
+    Map<String, dynamic>? status;
+    PlatformFile? p12;
+    var password = '';
+    var profiles = <PlatformFile>[];
+    var loadingStatus = true, saving = false, open = true;
+    StateSetter? upd;
+
+    () async {
+      try {
+        final d = await api.get('/client_build/base/ios_signing', timeout: const Duration(seconds: 60));
+        status = Map<String, dynamic>.from(d as Map);
+      } catch (_) {}
+      loadingStatus = false;
+      if (open) upd?.call(() {});
+    }();
+
+    await showCtDialog(
+      context,
+      title: T('IosSigning'),
+      width: 680,
+      builder: (ctx, set) {
+        upd = set;
+        final cert = status?['certificate'] as Map?;
+        final problem = '${status?['problem'] ?? ''}';
+        final c = ctx.ct;
+        return Loading(
+          loading: loadingStatus,
+          minHeight: 120,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Muted(T('IosSigningHelp')),
+            if (problem.isNotEmpty) CtAlert(problem, type: AlertType.warning, margin: const EdgeInsets.only(top: 12)),
+            if (cert != null)
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: c.tint(c.muted, 0.08), borderRadius: BorderRadius.circular(ctRadiusSm), border: Border.all(color: c.border)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${cert['name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Muted('${T('IosTeam')} ${cert['team_id'] ?? ''} · ${T('Expires')} ${_day(cert['expires'])}', size: 12),
+                  for (final p in rowsOf(status?['profiles']))
+                    Muted(
+                        '${p['name'] ?? ''}: ${p['app_id'] ?? ''} · ${p['all_devices'] == true ? T('IosAllDevices') : T('IosDevices', {'n': p['devices']})} · ${T('Expires')} ${_day(p['expires'])}',
+                        size: 12),
+                ]),
+              ),
+            const SizedBox(height: 18),
+            FormItem(
+              label: T('IosCertificate'),
+              labelWidth: 190,
+              child: _picker(p12?.name, () async {
+                final r = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['p12', 'pfx'], withData: true);
+                if (r == null || r.files.isEmpty) return;
+                set(() => p12 = r.files.first);
+              }),
+            ),
+            FormItem(
+              label: T('IosCertificatePassword'),
+              labelWidth: 190,
+              child: CtInput(password: true, showPassword: true, value: password, onChanged: (v) => password = v),
+            ),
+            FormItem(
+              label: T('IosProfiles'),
+              labelWidth: 190,
+              help: T('IosProfilesHelp'),
+              child: _picker(profiles.map((f) => f.name).join(', '), () async {
+                final r = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['mobileprovision'], allowMultiple: true, withData: true);
+                if (r == null || r.files.isEmpty) return;
+                set(() => profiles = r.files);
+              }),
+            ),
+          ]),
+        );
+      },
+      footer: (ctx, set) => [
+        if (status?['certificate'] != null)
+          CtButton(T('Remove'), tone: Tone.danger, soft: true, onPressed: () async {
+            if (!await confirm(ctx, T('IosSigningRemoveConfirm'))) return;
+            try {
+              final d = await api.post('/client_build/base/ios_signing/clear');
+              status = Map<String, dynamic>.from(d as Map);
+              set(() {});
+            } catch (_) {}
+          }),
+        CtButton(T('Close'), onPressed: () => Navigator.of(ctx).pop()),
+        CtButton(T('Save'), tone: Tone.primary, loading: saving, onPressed: p12 == null || profiles.isEmpty
+            ? null
+            : () async {
+                final bytes = p12!.bytes;
+                final pf = [for (final f in profiles) if (f.bytes != null) (f.name, f.bytes!)];
+                if (bytes == null || pf.isEmpty) return;
+                set(() => saving = true);
+                try {
+                  final d = await api.postMultipart('/client_build/base/ios_signing',
+                      fields: {'password': password}, files: {'p12': [(p12!.name, bytes)], 'profiles': pf});
+                  status = Map<String, dynamic>.from(d as Map);
+                  p12 = null;
+                  password = '';
+                  profiles = [];
+                  Toasts.success(T('IosSigningSaved'));
+                } catch (_) {}
+                set(() => saving = false);
+              }),
+      ],
+    );
+    open = false;
+  }
+
+  /// The certificate Windows builds are signed with.
+  Future<void> _win() async {
+    Map<String, dynamic>? status;
+    PlatformFile? pfx;
+    var password = '';
+    var name = '${(st['options'] as Map?)?['company'] ?? ''}';
+    final nameCtl = TextEditingController(text: name);
+    var loadingStatus = true, saving = false, open = true;
+    StateSetter? upd;
+
+    () async {
+      try {
+        final d = await api.get('/client_build/base/win_signing');
+        status = Map<String, dynamic>.from(d as Map);
+      } catch (_) {}
+      loadingStatus = false;
+      if (open) upd?.call(() {});
+    }();
+
+    // the certificate's name, made safe for a file name
+    String fileName() {
+      final subject = '${(status?['certificate'] as Map?)?['subject'] ?? ''}';
+      final m = RegExp(r'CN=([^,]+)').firstMatch(subject);
+      final n = (m?.group(1) ?? 'certificate').replaceAll(RegExp(r'[^A-Za-z0-9 ._-]'), '').trim();
+      return n.isEmpty ? 'certificate' : n;
+    }
+
+    Future<void> download(bool cert) async {
+      try {
+        final bytes = await api.getBytes(cert ? '/client_build/base/win_signing/cert' : '/client_build/base/win_signing/trust.ps1');
+        if (await saveBytes(cert ? '${fileName()}.cer' : 'trust-${fileName()}.ps1', bytes)) Toasts.success(T('OperationSuccess'));
+      } catch (_) {}
+    }
+
+    await showCtDialog(
+      context,
+      title: T('WindowsSigning'),
+      width: 680,
+      builder: (ctx, set) {
+        upd = set;
+        final cert = status?['certificate'] as Map?;
+        final problem = '${status?['problem'] ?? ''}';
+        final c = ctx.ct;
+
+        Future<void> done(Future<dynamic> Function() call) async {
+          set(() => saving = true);
+          try {
+            final d = await call();
+            status = Map<String, dynamic>.from(d as Map);
+            pfx = null;
+            password = '';
+            Toasts.success(T('WinSigningSaved'));
+          } catch (_) {}
+          set(() => saving = false);
+        }
+
+        Future<void> generate() async {
+          if (status?['certificate'] != null && !await confirm(ctx, T('WinGenerateConfirm'))) return;
+          await done(() => api.post('/client_build/base/win_signing/generate', body: {'name': name.trim()}, timeout: const Duration(seconds: 60)));
+        }
+
+        return Loading(
+          loading: loadingStatus,
+          minHeight: 120,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Muted(T('WindowsSigningHelp')),
+            if (status != null && status!['tool'] != true)
+              CtAlert(T('WinToolMissing'), type: AlertType.warning, margin: const EdgeInsets.only(top: 12))
+            else if (problem.isNotEmpty)
+              CtAlert(problem, type: AlertType.warning, margin: const EdgeInsets.only(top: 12)),
+            if (cert != null)
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: c.tint(c.muted, 0.08), borderRadius: BorderRadius.circular(ctRadiusSm), border: Border.all(color: c.border)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                    Text('${cert['subject'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    if (cert['self_signed'] == true) CtTag(T('WinSelfSigned'), small: true, tone: Tone.warning),
+                  ]),
+                  Muted('${T('Expires')} ${_day(cert['expires'])} · ${T('WinThumbprint')} ${cert['sha1'] ?? ''}', size: 12),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    CtButton(T('WinDownloadCert'), size: BtnSize.small, onPressed: () => download(true)),
+                    CtButton(T('WinDownloadScript'), size: BtnSize.small, onPressed: () => download(false)),
+                  ]),
+                ]),
+              ),
+            const SizedBox(height: 18),
+            FormItem(
+              label: T('WinCertName'),
+              labelWidth: 190,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                CtInput(controller: nameCtl, maxLength: 64, onChanged: (v) => set(() => name = v)),
+                const SizedBox(height: 8),
+                CtButton(T('WinGenerate'), tone: Tone.primary, loading: saving, onPressed: name.trim().isEmpty ? null : generate),
+              ]),
+            ),
+            FormItem(
+              label: T('WinUploadPfx'),
+              labelWidth: 190,
+              child: _picker(pfx?.name, () async {
+                final r = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pfx', 'p12'], withData: true);
+                if (r == null || r.files.isEmpty) return;
+                set(() => pfx = r.files.first);
+              }),
+            ),
+            FormItem(
+              label: T('IosCertificatePassword'),
+              labelWidth: 190,
+              child: CtInput(password: true, showPassword: true, value: password, onChanged: (v) => password = v),
+            ),
+          ]),
+        );
+      },
+      footer: (ctx, set) => [
+        if (status?['certificate'] != null)
+          CtButton(T('Remove'), tone: Tone.danger, soft: true, onPressed: () async {
+            if (!await confirm(ctx, T('WinSigningRemoveConfirm'))) return;
+            try {
+              final d = await api.post('/client_build/base/win_signing/clear');
+              status = Map<String, dynamic>.from(d as Map);
+              set(() {});
+            } catch (_) {}
+          }),
+        CtButton(T('Close'), onPressed: () => Navigator.of(ctx).pop()),
+        CtButton(T('WinUpload'), tone: Tone.primary, loading: saving, onPressed: pfx == null
+            ? null
+            : () async {
+                final bytes = pfx!.bytes;
+                if (bytes == null) return;
+                set(() => saving = true);
+                try {
+                  final d = await api.postMultipart('/client_build/base/win_signing',
+                      fields: {'password': password}, files: {'pfx': [(pfx!.name, bytes)]});
+                  status = Map<String, dynamic>.from(d as Map);
+                  pfx = null;
+                  password = '';
+                  Toasts.success(T('WinSigningSaved'));
+                } catch (_) {}
+                set(() => saving = false);
+              }),
+      ],
+    );
+    open = false;
+    nameCtl.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.ct;
@@ -736,7 +1006,14 @@ class _BaseCardState extends State<BaseCard> {
                 TextSpan(text: '${T('LatestRelease')}: ', style: TextStyle(color: c.muted, fontSize: 13)),
                 TextSpan(text: latest.isEmpty ? '?' : latest, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
               ])),
-              if (canSettings) ...[const SizedBox(width: 12), CtButton(T('Settings'), onPressed: _settings)],
+              if (canSettings) ...[
+                const SizedBox(width: 12),
+                CtButton(T('IosSigning'), onPressed: _ios),
+                const SizedBox(width: 12),
+                CtButton(T('WindowsSigning'), onPressed: _win),
+                const SizedBox(width: 12),
+                CtButton(T('Settings'), onPressed: _settings),
+              ],
             ]),
           ),
           if ('${st['problem'] ?? ''}'.isNotEmpty) CtAlert('${st['problem']}', type: AlertType.warning, margin: const EdgeInsets.only(top: 12)),
