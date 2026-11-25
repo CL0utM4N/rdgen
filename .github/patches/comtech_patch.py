@@ -68,6 +68,32 @@ class Patcher:
         print("ok: " + what)
 
 
+def device_nickname(p):
+    """Show a device's ID and its nickname together in device lists.
+
+    Staff set a device's Alias in the console as an internal nickname.
+    RustDesk shows an alias instead of the ID, and we want both. Its device
+    group list also never reads an alias from the server, so it is read here;
+    the address book tab already has it and shows it the same way.
+    """
+    p.replace("flutter/lib/common/hbbs/hbbs.dart",
+              "  String? device_group_name;\n  String note = '';\n",
+              "  String? device_group_name;\n  String note = '';\n  String alias = '';\n",
+              "device lists get the nickname set on the server")
+    p.replace("flutter/lib/common/hbbs/hbbs.dart",
+              "        note = json['note'] ?? '';\n",
+              "        note = json['note'] ?? '',\n        alias = json['alias'] ?? '';\n",
+              "device lists read the nickname from the server's reply")
+    p.replace("flutter/lib/common/hbbs/hbbs.dart",
+              '      "note": p.note,\n',
+              '      "note": p.note,\n      "alias": p.alias,\n',
+              "device lists pass the nickname on to their cards")
+    p.replace("flutter/lib/common/widgets/peer_card.dart",
+              "peer.alias.isEmpty ? formatID(peer.id) : peer.alias,",
+              "peer.alias.isEmpty ? formatID(peer.id) : '${formatID(peer.id)} · ${peer.alias}',",
+              "cards show the ID and the nickname", 2)
+
+
 def quote_app_name(p):
     """Quote the app name where Windows installs put it in a cmd script.
 
@@ -619,6 +645,7 @@ def main():
               "      case 'android':\n        return kPeerPlatformAndroid;\n"
               "      case 'ios':\n      case 'ipados':\n        return 'iOS';\n",
               "iOS devices in device groups have their own icon")
+    device_nickname(p)
     p.write("flutter/assets/ios.svg", open(os.path.join(HERE, "comtech_ios.svg"), encoding="utf-8").read(), "the iOS icon")
 
     if a.updates:
