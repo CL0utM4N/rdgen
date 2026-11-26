@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'console.dart';
@@ -307,6 +310,88 @@ class _ItemState extends State<_Item> {
   }
 }
 
+/// "Update available" in the header when the server has a newer version of
+/// this app waiting. Asks on start and every 30 minutes; nothing shows in a
+/// preview or an app that can't update itself.
+class _UpdatePill extends StatefulWidget {
+  const _UpdatePill();
+
+  @override
+  State<_UpdatePill> createState() => _UpdatePillState();
+}
+
+class _UpdatePillState extends State<_UpdatePill> {
+  Timer? timer;
+  String? version;
+  bool busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+    timer = Timer.periodic(const Duration(minutes: 30), (_) => _check());
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    final info = Console.I.host.updateInfo;
+    if (info.isEmpty) return;
+    try {
+      final text = await Console.I.api
+          .fetchText('/api/clientgen/update-status?${Uri(queryParameters: info).query}')
+          .timeout(const Duration(seconds: 20));
+      final d = jsonDecode(text);
+      final v = d is Map && d['available'] == true ? '${d['version'] ?? ''}' : '';
+      if (mounted) setState(() => version = v.isEmpty ? null : v);
+    } catch (_) {
+      // quiet: the next round tries again
+    }
+  }
+
+  Future<void> _update() async {
+    final v = version;
+    if (v == null || busy) return;
+    if (!await confirm(context, T('UpdateThisApp', {'version': v}), confirmText: T('UpdateNow'), title: T('UpdateNow'), warning: false)) return;
+    setState(() => busy = true);
+    final con = Console.I;
+    final id = con.host.deviceId;
+    // the same as Update now in Devices: the server flags this device, which a Mac needs
+    if (id != null && con.signedIn) {
+      try {
+        final d = await con.api.get('/peer/list', params: {'id': id, 'page': 1, 'page_size': 20}, quiet: true);
+        final row = rowsOf(d).where((r) => '${r['id']}' == id).firstOrNull;
+        if (row != null) await con.api.post('/peer/requestUpdate', body: {'row_ids': [row['row_id']]}, quiet: true);
+      } catch (_) {}
+    }
+    con.host.checkForUpdates();
+    Toasts.success(T('Updating'));
+    if (mounted) setState(() => busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = version;
+    if (v == null) return const SizedBox.shrink();
+    final narrow = isNarrow(context);
+    return Padding(
+      padding: EdgeInsets.only(right: narrow ? 8 : 16),
+      child: CtButton(
+        narrow ? T('UpdateShort') : T('UpdateAvailableVersion', {'version': v}),
+        tone: Tone.primary,
+        size: BtnSize.small,
+        icon: Icons.system_update_alt,
+        loading: busy,
+        onPressed: _update,
+      ),
+    );
+  }
+}
+
 class _Header extends StatelessWidget {
   const _Header();
 
@@ -330,6 +415,7 @@ class _Header extends StatelessWidget {
           child: Text(con.route == clientRoute ? T('Client') : (!con.signedIn ? T('Login') : (def == null ? '' : T(def.title))),
               overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: c.text)),
         ),
+        const _UpdatePill(),
         Tooltip(
           message: con.dark ? T('LightMode') : T('DarkMode'),
           child: CtSwitch(

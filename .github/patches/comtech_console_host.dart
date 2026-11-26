@@ -96,7 +96,8 @@ class RustDeskConsoleHost extends ConsoleHost {
   final String? deviceId;
   @override
   final String? deviceUuid;
-  RustDeskConsoleHost(this.server, this.deviceId, this.deviceUuid);
+  final String version;
+  RustDeskConsoleHost(this.server, this.deviceId, this.deviceUuid, this.version);
 
   @override
   String get apiServer => server.endsWith('/') ? server.substring(0, server.length - 1) : server;
@@ -155,6 +156,25 @@ class RustDeskConsoleHost extends ConsoleHost {
     ));
   }
 
+  // the desktop apps update themselves from our server; phones have their own check
+  @override
+  Map<String, String> get updateInfo {
+    final id = deviceId, uuid = deviceUuid;
+    if (id == null || uuid == null || Platform.isAndroid || Platform.isIOS) return const {};
+    return {
+      'platform': Platform.isMacOS ? 'macos' : (Platform.isLinux ? 'linux' : 'windows'),
+      'id': id,
+      'uuid': uuid,
+      'build': bind.mainGetHardOption(key: 'comtech-build'),
+      'base': bind.mainGetHardOption(key: 'comtech-base'),
+      'version': version,
+    };
+  }
+
+  // the About page's Check for updates button runs this same round
+  @override
+  void checkForUpdates() => bind.mainSetOption(key: 'comtech-check-update', value: 'Y');
+
   @override
   String get platform => Platform.isAndroid
       ? 'android'
@@ -183,8 +203,8 @@ class _ComtechConsolePageState extends State<ComtechConsolePage> with AutomaticK
   void initState() {
     super.initState();
     if (!_started) {
-      Future.wait([bind.mainGetApiServer(), bind.mainGetMyId(), bind.mainGetUuid()]).then((r) {
-        Console(RustDeskConsoleHost(r[0], r[1].isEmpty ? null : r[1], r[2].isEmpty ? null : r[2]));
+      Future.wait([bind.mainGetApiServer(), bind.mainGetMyId(), bind.mainGetUuid(), bind.mainGetVersion()]).then((r) {
+        Console(RustDeskConsoleHost(r[0], r[1].isEmpty ? null : r[1], r[2].isEmpty ? null : r[2], r[3]));
         _started = true;
         if (mounted) setState(() {});
       });

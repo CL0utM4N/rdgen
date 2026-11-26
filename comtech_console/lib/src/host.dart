@@ -35,6 +35,15 @@ abstract class ConsoleHost {
   /// The client's own settings page, opened from the header.
   void openClientSettings() {}
 
+  /// What the server needs to say whether this app has an update waiting:
+  /// platform, id, uuid, build, base and version. Empty when the app can't
+  /// update itself (previews, phones).
+  Map<String, String> get updateInfo => const {};
+
+  /// Asks the app to look for an update now; it installs once nobody is
+  /// connected to it.
+  void checkForUpdates() {}
+
   /// Short name for the sign-in log, such as "windows".
   String get platform => 'windows';
 }

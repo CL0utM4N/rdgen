@@ -65,6 +65,17 @@ fn build_uuid() -> String {
         .unwrap_or_default()
 }
 
+// which base client this build was made from; the server uses it to tell a
+// rebuilt base of the same RustDesk version from the one already installed
+fn base_id() -> String {
+    config::HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get("comtech-base")
+        .cloned()
+        .unwrap_or_default()
+}
+
 fn encoded_uuid() -> String {
     crate::encode64(hbb_common::get_uuid())
         .replace('+', "%2B")
@@ -74,11 +85,12 @@ fn encoded_uuid() -> String {
 
 fn ask_server(api: &str) -> ResultType<Option<Update>> {
     let url = format!(
-        "{}/api/clientgen/mac-update-check?id={}&uuid={}&build={}&version={}&arch={}",
+        "{}/api/clientgen/mac-update-check?id={}&uuid={}&build={}&base={}&version={}&arch={}",
         api,
         Config::get_id(),
         encoded_uuid(),
         build_uuid(),
+        base_id(),
         crate::VERSION,
         std::env::consts::ARCH
     );

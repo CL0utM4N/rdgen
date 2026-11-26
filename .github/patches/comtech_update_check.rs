@@ -15,11 +15,17 @@ fn comtech_update_check_url() -> String {
         .cloned()
         .unwrap_or_default();
     format!(
-        "{}/api/clientgen/update-check?id={}&uuid={}&build={}&version={}&arch={}",
+        "{}/api/clientgen/update-check?id={}&uuid={}&build={}&base={}&version={}&arch={}",
         api,
         Config::get_id(),
         crate::encode64(hbb_common::get_uuid()).replace('+', "%2B").replace('/', "%2F").replace('=', "%3D"),
         build,
+        config::HARD_SETTINGS
+            .read()
+            .unwrap()
+            .get("comtech-base")
+            .cloned()
+            .unwrap_or_default(),
         crate::VERSION,
         std::env::consts::ARCH
     )

@@ -655,6 +655,18 @@ def main():
                   "    let url = comtech_update_check_url();\n",
                   "updates are checked with our server")
         p.append("src/common.rs", "comtech_update_check.rs", "the update check address")
+        # 1.5.3's updater only takes github.com release pages, so on Windows
+        # it hands over to ours (older versions' updater works as it is)
+        updater = "src/updater.rs"
+        if os.path.isfile(updater) and "verified_update_artifact_from_release_page_url" in open(updater, encoding="utf-8").read():
+            gate = ("    if !(manually || config::Config::get_bool_option(keys::OPTION_ALLOW_AUTO_UPDATE)) {\n"
+                    "        return Ok(());\n    }\n")
+            p.replace(updater, gate,
+                      gate + '    #[cfg(target_os = "windows")]\n    {\n        return comtech_check_update();\n    }\n',
+                      "Windows updates come from our server")
+            p.append(updater, "comtech_win_update.rs", "the Windows updater")
+        else:
+            print("skipped: Windows updates from our server need RustDesk 1.5.3 or newer (RustDesk's updater is used)")
         # "Update now" in the console: the API flags it in the heartbeat reply
         # and the updater checks at once (when nobody is connected)
         hook = '                        if let Some(conns)  = rsp.remove("disconnect") {\n'
